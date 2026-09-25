@@ -59,9 +59,9 @@ jobs:
           echo "OpenSSL headers at: $OSSL_HEADERS"
           mkdir -p Pods/OpenSSL-Universal/include
           ln -sf "$PWD/$OSSL_HEADERS" Pods/OpenSSL-Universal/include/openssl
-          OSSL_FW=$(find Pods/OpenSSL-Universal -type d -name "*.framework" | head -1)
-          echo "OpenSSL framework at: $OSSL_FW"
-          echo "OSSL_FW_DIR=$PWD/$(dirname $OSSL_FW)" >> $GITHUB_ENV
+          OSSL_FW_DIR=$(find Pods/OpenSSL-Universal -type d -path "*ios-arm64*/OpenSSL.framework" -exec dirname {} \; | head -1)
+          echo "OpenSSL iOS framework dir: $OSSL_FW_DIR"
+          echo "OSSL_FW_DIR=$PWD/$OSSL_FW_DIR" >> $GITHUB_ENV
 
       - name: Build .xcarchive (unsigned)
         id: build
