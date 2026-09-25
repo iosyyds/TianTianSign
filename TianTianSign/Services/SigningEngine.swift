@@ -3,9 +3,6 @@
 //  TianTianSign
 //
 //  签名引擎：直接调用静态链接的 zsign C++ 库
-//  zsign 命令行等价：
-//    zsign -k cert.p12 -p 123456 -m profile.mobileprovision
-//          -b new.bundle.id -n newname -o out.ipa in.ipa
 //
 
 import Foundation
@@ -53,7 +50,6 @@ struct SigningEngine {
         let outURL = AppState.shared.outputDir.appendingPathComponent(outName)
         try? fm.removeItem(at: outURL)
 
-        // 构造 zsign argv
         var args: [String] = [
             "zsign",
             "-k", task.certificate.p12URL.path,
@@ -78,10 +74,9 @@ struct SigningEngine {
         task.logLines.append(.init(date: Date(), level: .info,
                                    message: "调用 zsign，参数：\(args.joined(separator: " "))"))
 
-        // 调 C 函数
-        let cArgs: [UnsafeMutablePointer<CChar>?] = args.map { strdup($0) }
-        defer { cArgs.forEach { free($0) } }
-        let ret = zsign_ios_run(Int32(args.count), cArgs)
+        var cArgs: [UnsafePointer<CChar>?] = args.map { UnsafePointer(strdup($0)) }
+        defer { cArgs.forEach { free(UnsafeMutablePointer(mutating: $0)) } }
+        let ret = zsign_ios_run(Int32(args.count), &cArgs)
 
         task.progress = 0.9
         guard ret == 0 else {
