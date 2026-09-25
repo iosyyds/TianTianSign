@@ -47,8 +47,13 @@ targets:
           - "$(SRCROOT)/SigningCore/common"
           - "$(SRCROOT)/SigningCore/third-party/minizip"
           - "$(SRCROOT)/SigningCore/third-party/zlib"
+          - "$(PODS_ROOT)/OpenSSL-Universal/include"
+        LIBRARY_SEARCH_PATHS:
+          - "$(PODS_ROOT)/OpenSSL-Universal/lib-ios"
         OTHER_LDFLAGS:
           - "-lc++"
           - "-lz"
+          - "-lcrypto"
+          - "-lssl"
           - "-framework Security"
         CLANG_CXX_LANGUAGE_STANDARD: "c++17"
