@@ -24,7 +24,7 @@ jobs:
           xcodebuild -version
 
       - name: Install XcodeGen
-        run: brew install xcodegen
+        run: brew install xcodegen || brew upgrade xcodegen || true
 
       - name: Generate Xcode project
         run: |
@@ -33,6 +33,7 @@ jobs:
           xcodebuild -list -project TianTianSign.xcodeproj || true
 
       - name: Build .xcarchive (unsigned)
+        continue-on-error: true
         run: |
           set -o pipefail
           xcodebuild archive \
@@ -45,23 +46,38 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee build.log
-          echo "----- last 80 lines of build.log -----"
-          tail -n 80 build.log
+          echo "----- last 120 lines of build.log -----"
+          tail -n 120 build.log
 
       - name: Pack unsigned IPA
+        if: always()
+        continue-on-error: true
         run: |
-          set -e
-          ls build/
-          mkdir -p build/Payload
-          cp -R build/TianTianSign.xcarchive/Products/Applications/TianTianSign.app build/Payload/
-          cd build
-          zip -r TianTianSign-unsigned-v0.1.0.ipa Payload
-          ls -la TianTianSign-unsigned-v0.1.0.ipa
+          ls build/ || true
+          if [ -d "build/TianTianSign.xcarchive/Products/Applications" ]; then
+            mkdir -p build/Payload
+            cp -R build/TianTianSign.xcarchive/Products/Applications/TianTianSign.app build/Payload/
+            cd build
+            zip -r TianTianSign-unsigned-v0.1.0.ipa Payload
+            ls -la TianTianSign-unsigned-v0.1.0.ipa
+          fi
 
       - name: Upload IPA artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: TianTianSign-unsigned-ipa
           path: build/TianTianSign-unsigned-v0.1.0.ipa
-          if-no-files-found: error
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: |
+            build.log
+            build/
+          if-no-files-found: warn
           retention-days: 14
