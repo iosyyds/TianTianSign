@@ -59,7 +59,9 @@ jobs:
           echo "OpenSSL headers at: $OSSL_HEADERS"
           mkdir -p Pods/OpenSSL-Universal/include
           ln -sf "$PWD/$OSSL_HEADERS" Pods/OpenSSL-Universal/include/openssl
-          ls Pods/OpenSSL-Universal/include/openssl | head
+          OSSL_FW=$(find Pods/OpenSSL-Universal -type d -name "*.framework" | head -1)
+          echo "OpenSSL framework at: $OSSL_FW"
+          echo "OSSL_FW_DIR=$PWD/$(dirname $OSSL_FW)" >> $GITHUB_ENV
 
       - name: Build .xcarchive (unsigned)
         id: build
@@ -72,6 +74,7 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -archivePath build/TianTianSign.xcarchive \
+            FRAMEWORK_SEARCH_PATHS="$OSSL_FW_DIR" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
