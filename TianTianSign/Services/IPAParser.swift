@@ -20,7 +20,8 @@ struct IPAParser {
         //
         // 这里返回占位，保证 App 能跑通 UI；真实解析见 SigningCore/
         let fm = FileManager.default
-        let size = (try? fm.attributesOfItem(atPath: url.fileSizeKey)?[.size] as? Int64) ?? 0
+        let attrs = try? fm.attributesOfItem(atPath: url.path)
+        let size = (attrs?[.size] as? Int64) ?? 0
         return IPAFile(
             id: UUID(),
             fileURL: url,
@@ -35,8 +36,4 @@ struct IPAParser {
             cachedIcon: nil
         )
     }
-}
-
-private extension URL {
-    var fileSizeKey: String { "NSFileSize" }
 }

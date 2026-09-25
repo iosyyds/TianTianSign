@@ -1,0 +1,42 @@
+name: TianTianSign
+options:
+  bundleIdPrefix: com.tiantiansign
+  deploymentTarget:
+    iOS: "15.0"
+  xcodeVersion: "15.0"
+
+targets:
+  TianTianSign:
+    type: application
+    platform: iOS
+    sources:
+      - path: TianTianSign
+        excludes:
+          - "Info.plist"
+    info:
+      path: TianTianSign/Info.plist
+      properties:
+        CFBundleName: 甜甜签
+        CFBundleDisplayName: 甜甜签
+        CFBundleIdentifier: com.tiantiansign.app
+        CFBundleVersion: "1"
+        CFBundleShortVersionString: "0.1.0"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportsDocumentBrowser: true
+        LSSupportsOpeningDocumentsInPlace: true
+        NSDocumentsFolderUsageDescription: 甜甜签需要访问「文件」App 来导入你自己的 IPA、证书 (.p12) 和描述文件 (.mobileprovision)。
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tiantiansign.app
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1"
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGN_IDENTITY: ""
+        PROVISIONING_PROFILE_SPECIFIER: ""
