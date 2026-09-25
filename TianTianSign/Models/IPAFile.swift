@@ -8,7 +8,7 @@
 import Foundation
 import SwiftUI
 
-struct IPAFile: Identifiable, Hashable {
+struct IPAFile: Identifiable {
     let id: UUID
     /// 本地文件 URL（Documents/IPALibrary/）
     var fileURL: URL

@@ -2,7 +2,7 @@ name: TianTianSign
 options:
   bundleIdPrefix: com.tiantiansign
   deploymentTarget:
-    iOS: "15.0"
+    iOS: "17.0"
   xcodeVersion: "15.0"
 
 targets:

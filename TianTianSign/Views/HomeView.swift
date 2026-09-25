@@ -24,8 +24,13 @@ struct HomeView: View {
                 Section("IPA 文件") {
                     if let ipa = pickedIPA {
                         HStack {
-                            (ipa.cachedIcon ?? UIImage(named: "AppIcon"))
-                                .map { Image(uiImage: $0).resizable().frame(width: 48, height: 48).cornerRadius(10) }
+                            Group {
+                                if let icon = ipa.cachedIcon {
+                                    Image(uiImage: icon).resizable().frame(width: 48, height: 48).cornerRadius(10)
+                                } else {
+                                    Image(systemName: "shippingbox").resizable().frame(width: 48, height: 48).foregroundColor(.pink)
+                                }
+                            }
                             VStack(alignment: .leading) {
                                 Text(ipa.appName).font(.headline)
                                 Text("\(ipa.bundleID) · \(ipa.sizeText)").font(.caption).foregroundColor(.secondary)
