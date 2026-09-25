@@ -16,10 +16,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show Xcode
+      - name: Select Xcode
         run: |
+          XCODE_APP=$(ls -d /Applications/Xcode_*.app | tail -1)
+          echo "Selecting $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
           xcodebuild -version
-          ls /Applications/ | grep Xcode
 
       - name: Install XcodeGen
         run: brew install xcodegen
