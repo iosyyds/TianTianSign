@@ -55,6 +55,11 @@ jobs:
         run: |
           xcodegen generate
           pod install --repo-update
+          OSSL_HEADERS=$(find Pods/OpenSSL-Universal -type d -name Headers | head -1)
+          echo "OpenSSL headers at: $OSSL_HEADERS"
+          mkdir -p Pods/OpenSSL-Universal/include
+          ln -sf "$PWD/$OSSL_HEADERS" Pods/OpenSSL-Universal/include/openssl
+          ls Pods/OpenSSL-Universal/include/openssl | head
 
       - name: Build .xcarchive (unsigned)
         id: build
