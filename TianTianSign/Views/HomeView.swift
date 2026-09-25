@@ -96,7 +96,7 @@ struct HomeView: View {
             }
             .navigationTitle("甜甜签")
             .fileImporter(isPresented: $showingPicker,
-                          allowedContentTypes: [UTType(filenameExtension: "ipa") ?? .data],
+                          allowedContentTypes: [.item],
                           allowsMultipleSelection: false) { result in
                 handleImport(result)
             }
@@ -110,8 +110,19 @@ struct HomeView: View {
 
     private func handleImport(_ result: Result<[URL], Error>) {
         guard case .success(let urls) = result, let url = urls.first else { return }
-        let resolved = url.startAccessingSecurityScopedResource() ? url : url
-        pickedIPA = try? IPAParser.parse(ipazip: resolved)
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let tmp = FileManager.default.temporaryDirectory
+                .appendingPathComponent(url.lastPathComponent)
+            if FileManager.default.fileExists(atPath: tmp.path) {
+                try FileManager.default.removeItem(at: tmp)
+            }
+            try FileManager.default.copyItem(at: url, to: tmp)
+            pickedIPA = try IPAParser.parse(ipazip: tmp)
+        } catch {
+            pickedIPA = nil
+        }
     }
 
     private func startSigning() {

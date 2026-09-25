@@ -43,11 +43,22 @@ struct ProfileListView: View {
                 Button { showingImporter = true } label: { Image(systemName: "plus") }
             }
             .fileImporter(isPresented: $showingImporter,
-                          allowedContentTypes: [UTType(filenameExtension: "mobileprovision") ?? .data],
+                          allowedContentTypes: [.item],
                           allowsMultipleSelection: false) { result in
-                guard case .success(let urls) = result, let url = urls.first,
-                      let p = try? ProfileParser.parse(fileURL: url) else { return }
-                appState.profiles.append(p)
+                guard case .success(let urls) = result, let url = urls.first else { return }
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                do {
+                    let tmp = FileManager.default.temporaryDirectory
+                        .appendingPathComponent(url.lastPathComponent)
+                    if FileManager.default.fileExists(atPath: tmp.path) {
+                        try FileManager.default.removeItem(at: tmp)
+                    }
+                    try FileManager.default.copyItem(at: url, to: tmp)
+                    if let p = try? ProfileParser.parse(fileURL: tmp) {
+                        appState.profiles.append(p)
+                    }
+                } catch {}
             }
         }
     }

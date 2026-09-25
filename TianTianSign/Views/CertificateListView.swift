@@ -45,11 +45,20 @@ struct CertificateListView: View {
                 Button { showingImporter = true } label: { Image(systemName: "plus") }
             }
             .fileImporter(isPresented: $showingImporter,
-                          allowedContentTypes: [UTType(filenameExtension: "p12") ?? .data],
+                          allowedContentTypes: [.item],
                           allowsMultipleSelection: false) { result in
-                if case .success(let urls) = result, let url = urls.first {
-                    pendingURL = url
-                }
+                guard case .success(let urls) = result, let url = urls.first else { return }
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                do {
+                    let tmp = FileManager.default.temporaryDirectory
+                        .appendingPathComponent(url.lastPathComponent)
+                    if FileManager.default.fileExists(atPath: tmp.path) {
+                        try FileManager.default.removeItem(at: tmp)
+                    }
+                    try FileManager.default.copyItem(at: url, to: tmp)
+                    pendingURL = tmp
+                } catch {}
             }
             .alert("输入 p12 密码", isPresented: Binding(
                 get: { pendingURL != nil },
