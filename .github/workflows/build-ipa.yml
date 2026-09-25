@@ -56,11 +56,11 @@ jobs:
           xcodegen generate
           pod install --repo-update
           OSSL_HEADERS=$(find Pods/OpenSSL-Universal -type d -name Headers | head -1)
-          echo "OpenSSL headers at: $OSSL_HEADERS"
           mkdir -p Pods/OpenSSL-Universal/include
           ln -sf "$PWD/$OSSL_HEADERS" Pods/OpenSSL-Universal/include/openssl
-          OSSL_FW_DIR=$(find Pods/OpenSSL-Universal -type d -path "*ios-arm64*/OpenSSL.framework" -exec dirname {} \; | head -1)
-          echo "OpenSSL iOS framework dir: $OSSL_FW_DIR"
+          # Device-only slice: exactly ios-arm64 (not ios-arm64_x86_64-simulator)
+          OSSL_FW_DIR=$(dirname "$(find Pods/OpenSSL-Universal -type d -path '*xcframework/ios-arm64/OpenSSL.framework' | head -1)")
+          echo "OpenSSL device framework dir: $OSSL_FW_DIR"
           echo "OSSL_FW_DIR=$PWD/$OSSL_FW_DIR" >> $GITHUB_ENV
 
       - name: Build .xcarchive (unsigned)
