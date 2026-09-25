@@ -16,21 +16,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+      - name: Show Xcode
+        run: |
+          xcodebuild -version
+          ls /Applications/ | grep Xcode
 
       - name: Install XcodeGen
         run: brew install xcodegen
 
       - name: Generate Xcode project
-        run: xcodegen generate
-
-      - name: Show project
-        run: ls -la && xcodebuild -list -project TianTianSign.xcodeproj
+        run: |
+          xcodegen generate
+          ls -la
+          xcodebuild -list -project TianTianSign.xcodeproj || true
 
       - name: Build .xcarchive (unsigned)
         run: |
-          set -e
+          set -o pipefail
           xcodebuild archive \
             -project TianTianSign.xcodeproj \
             -scheme TianTianSign \
@@ -40,11 +42,14 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            PROVISIONING_PROFILE_SPECIFIER=""
+            PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee build.log
+          echo "----- last 80 lines of build.log -----"
+          tail -n 80 build.log
 
       - name: Pack unsigned IPA
         run: |
           set -e
+          ls build/
           mkdir -p build/Payload
           cp -R build/TianTianSign.xcarchive/Products/Applications/TianTianSign.app build/Payload/
           cd build
