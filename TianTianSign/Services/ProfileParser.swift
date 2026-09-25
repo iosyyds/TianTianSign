@@ -12,8 +12,6 @@ import Security
 struct ProfileParser {
 
     static func parse(fileURL url: URL) throws -> ProvisioningProfile {
-        let data = try Data(contentsOf: url)
-
         // SecCMS 解码（iOS 15+ 有 CMSDecoder 私有 API；
         // 开源项目里常见做法是直接调 OpenSSL d2i_PKCS7_bio）
         // 解析后的 plist 里有：

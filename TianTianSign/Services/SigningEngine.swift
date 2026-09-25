@@ -22,7 +22,9 @@ class SigningViewModel: ObservableObject {
         task.logLines.append(.init(date: Date(), level: .info,
                                    message: "🍩 甜甜签开始工作…"))
         do {
-            try await engine.run(&task)
+            var localTask = task
+            try await engine.run(&localTask)
+            task = localTask
             task.state = .done
             task.logLines.append(.init(date: Date(), level: .success,
                                        message: "✅ 签名完成！输出：\(task.outputIPAURL?.lastPathComponent ?? "-")"))
@@ -83,7 +85,6 @@ struct SigningEngine {
         task.state = .signing
         task.progress = 0.6
         let password = CertificateImporter.readPassword(forCertificateID: task.certificate.id) ?? ""
-        let signedAppDir = workDir.appendingPathComponent("Payload").appendingPathComponent(appDir.lastPathComponent)
         let ret = zsign_execute(
             appDir.path,
             task.certificate.p12URL.path,

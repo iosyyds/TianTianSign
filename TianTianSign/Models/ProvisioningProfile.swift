@@ -66,7 +66,7 @@ enum AnyCodable: Codable, Hashable {
         else if let v = try? c.decode([AnyCodable].self) { self = .array(v) }
         else if let v = try? c.decode([String: AnyCodable].self) { self = .dict(v) }
         else {
-            throw DecodingError.dataCorruptedError(in: c, debugDescription: "Unsupported type", underlyingError: nil)
+            throw DecodingError.dataCorruptedError(in: c, debugDescription: "Unsupported type")
         }
     }
     func encode(to encoder: Encoder) throws {
