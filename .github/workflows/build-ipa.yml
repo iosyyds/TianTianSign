@@ -67,8 +67,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee build.log
-          echo "----- last 100 lines of build.log -----"
-          tail -n 100 build.log
+          echo "----- grep errors -----"
+          grep -E "error:|fatal error|Undefined symbol|ld: " build.log | head -50
 
       - name: Pack unsigned IPA
         if: always()

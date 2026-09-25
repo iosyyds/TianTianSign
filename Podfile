@@ -1,5 +1,5 @@
 platform :ios, '17.0'
 
 target 'TianTianSign' do
-  pod 'OpenSSL-Universal', '~> 1.1.1'
+  pod 'OpenSSL-Universal', '~> 3.2'
 end
