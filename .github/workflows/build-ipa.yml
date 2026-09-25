@@ -26,6 +26,26 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen || brew upgrade xcodegen || true
 
+      - name: Vendor zsign engine
+        run: |
+          set -e
+          git clone --depth 1 https://github.com/zhlynn/zsign.git /tmp/zsign
+          mkdir -p SigningCore
+          cp -R /tmp/zsign/src/* SigningCore/
+          sed -i '' 's/^int main(int argc, char\*\ argv\[\])/extern "C" int zsign_main(int argc, char* argv[])/' SigningCore/zsign.cpp
+          cat > SigningCore/ios_bridge.cpp << 'BRIDGE'
+          #include <string>
+          #include <vector>
+          extern "C" int zsign_main(int argc, char* argv[]);
+          extern "C" int zsign_ios_run(int argc, const char** argv) {
+              std::vector<char*> args;
+              for (int i = 0; i < argc; i++) args.push_back((char*)argv[i]);
+              return zsign_main(argc, args.data());
+          }
+          BRIDGE
+          rm -f SigningCore/third-party/minizip/iowin32.c
+          ls SigningCore/
+
       - name: Generate Xcode project
         run: |
           xcodegen generate
@@ -46,14 +66,13 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee build.log
-          echo "----- last 120 lines of build.log -----"
-          tail -n 120 build.log
+          echo "----- last 100 lines of build.log -----"
+          tail -n 100 build.log
 
       - name: Pack unsigned IPA
         if: always()
-        continue-on-error: true
         run: |
-          ls build/ || true
+          set +e
           if [ -d "build/TianTianSign.xcarchive/Products/Applications" ]; then
             mkdir -p build/Payload
             cp -R build/TianTianSign.xcarchive/Products/Applications/TianTianSign.app build/Payload/
@@ -76,8 +95,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: build-log
-          path: |
-            build.log
-            build/
+          path: build.log
           if-no-files-found: warn
           retention-days: 14

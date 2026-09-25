@@ -13,6 +13,7 @@ targets:
       - path: TianTianSign
         excludes:
           - "Info.plist"
+      - path: SigningCore
     info:
       path: TianTianSign/Info.plist
       properties:
@@ -40,3 +41,14 @@ targets:
         CODE_SIGNING_ALLOWED: "NO"
         CODE_SIGN_IDENTITY: ""
         PROVISIONING_PROFILE_SPECIFIER: ""
+        SWIFT_OBJC_BRIDGING_HEADER: TianTianSign/TianTianSign-Bridging-Header.h
+        HEADER_SEARCH_PATHS:
+          - "$(SRCROOT)/SigningCore"
+          - "$(SRCROOT)/SigningCore/common"
+          - "$(SRCROOT)/SigningCore/third-party/minizip"
+          - "$(SRCROOT)/SigningCore/third-party/zlib"
+        OTHER_LDFLAGS:
+          - "-lc++"
+          - "-lz"
+          - "-framework Security"
+        CLANG_CXX_LANGUAGE_STANDARD: "c++17"
