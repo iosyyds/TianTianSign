@@ -20,14 +20,13 @@ jobs:
       - name: Select Xcode
         run: |
           XCODE_APP=$(ls -d /Applications/Xcode_*.app | tail -1)
-          echo "Selecting $XCODE_APP"
           sudo xcode-select -s "$XCODE_APP/Contents/Developer"
           xcodebuild -version
 
       - name: Install tools
         run: |
-          brew install xcodegen || brew upgrade xcodegen || true
-          brew install cocoapods || brew upgrade cocoapods || true
+          brew install xcodegen || true
+          brew install cocoapods || true
 
       - name: Vendor zsign engine
         run: |
@@ -54,6 +53,7 @@ jobs:
           pod install --repo-update
 
       - name: Build .xcarchive (unsigned)
+        id: build
         continue-on-error: true
         run: |
           set -o pipefail
@@ -67,8 +67,17 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee build.log
-          echo "----- grep errors -----"
-          grep -E "error:|fatal error|Undefined symbol|ld: " build.log | head -50
+
+      - name: Show errors
+        run: |
+          echo "=== ERRORS ==="
+          grep -n -E "error:|fatal error|Undefined symbol|ld: |linker command failed" build.log | head -30
+          echo "=== LAST 20 LINES ==="
+          tail -20 build.log
+
+      - name: Fail if build failed
+        if: steps.build.outcome == 'failure'
+        run: exit 1
 
       - name: Pack unsigned IPA
         if: always()
@@ -79,7 +88,6 @@ jobs:
             cp -R build/TianTianSign.xcarchive/Products/Applications/TianTianSign.app build/Payload/
             cd build
             zip -r TianTianSign-unsigned-v0.1.0.ipa Payload
-            ls -la TianTianSign-unsigned-v0.1.0.ipa
           fi
 
       - name: Upload IPA artifact
