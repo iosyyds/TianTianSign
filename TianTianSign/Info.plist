@@ -1,0 +1,14 @@
+{
+  "CFBundleName": "甜甜签",
+  "CFBundleDisplayName": "甜甜签",
+  "CFBundleIdentifier": "com.tiantiansign.app",
+  "CFBundleVersion": "1",
+  "CFBundleShortVersionString": "0.1.0",
+  "UILaunchScreen": {},
+  "UISupportedInterfaceOrientations": [
+    "UIInterfaceOrientationPortrait"
+  ],
+  "NSDocumentsFolderUsageDescription": "甜甜签需要访问「文件」App 来导入你自己的 IPA、证书 (.p12) 和描述文件 (.mobileprovision)。",
+  "UISupportsDocumentBrowser": true,
+  "LSSupportsOpeningDocumentsInPlace": true
+}

@@ -1,0 +1,41 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcuserdatad/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+.build/
+Packages/
+Package.resolved
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Secrets / signing material — NEVER commit
+*.p12
+*.mobileprovision
+*.cer
+*.pem
+*.key
+*.mobileprov
+certs/
+profiles/
+signing-input/
+*.ipa
+!docs/**/*.ipa
+
+# Playgrounds
+playground.xcplaygrounddate
+*.playground/
+
+# misc
+*.log
+.vscode/
+.idea/

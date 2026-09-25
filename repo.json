@@ -1,0 +1,23 @@
+{
+  "name": "甜甜签 TianTianSign",
+  "identifier": "com.tiantiansign.source",
+  "website": "https://github.com/iosyyds/TianTianSign",
+  "subtitle": "甜甜圈一样好用的 iOS 重签名工具",
+  "description": "甜甜签：在本机对 IPA 重签名，支持证书管理、dylib 注入、Bundle ID 修改、应用多开。",
+  "iconURL": "https://aka.doubaocdn.com/s/8Vv3LGCSep",
+  "tintColor": "FF6B9D",
+  "apps": [
+    {
+      "name": "甜甜签",
+      "identifier": "com.tiantiansign.app",
+      "version": "0.1.0",
+      "versionDate": "2026-09-25T00:00:00Z",
+      "versionDescription": "首个公开 WIP 版本：UI 原型，证书 / 描述文件 / IPA 资料库。",
+      "downloadURL": "https://github.com/iosyyds/TianTianSign/releases/download/v0.1.0/TianTianSign.ipa",
+      "localizedDescription": "甜甜签 · 免费开源的 iOS IPA 重签名工具。",
+      "iconURL": "https://aka.doubaocdn.com/s/8Vv3LGCSep",
+      "tintColor": "FF6B9D",
+      "size": 0
+    }
+  ]
+}
