@@ -2,8 +2,6 @@
 //  HomeView.swift
 //  TianTianSign
 //
-//  首页：选 IPA → 选证书 → 选描述文件 → 开始签名
-//
 
 import SwiftUI
 import UniformTypeIdentifiers
@@ -24,13 +22,7 @@ struct HomeView: View {
                 Section("IPA 文件") {
                     if let ipa = pickedIPA {
                         HStack {
-                            Group {
-                                if let icon = ipa.cachedIcon {
-                                    Image(uiImage: icon).resizable().frame(width: 48, height: 48).cornerRadius(10)
-                                } else {
-                                    Image(systemName: "shippingbox").resizable().frame(width: 48, height: 48).foregroundColor(.pink)
-                                }
-                            }
+                            Image(systemName: "shippingbox").resizable().frame(width: 48, height: 48).foregroundColor(.pink)
                             VStack(alignment: .leading) {
                                 Text(ipa.appName).font(.headline)
                                 Text("\(ipa.bundleID) · \(ipa.sizeText)").font(.caption).foregroundColor(.secondary)
@@ -39,9 +31,7 @@ struct HomeView: View {
                             Button("换一个") { showingPicker = true }
                         }
                     } else {
-                        Button {
-                            showingPicker = true
-                        } label: {
+                        Button { showingPicker = true } label: {
                             Label("从文件 App 导入 IPA", systemImage: "square.and.arrow.down.on.square")
                         }
                     }
@@ -77,35 +67,27 @@ struct HomeView: View {
                 }
 
                 Section {
-                    Button {
-                        startSigning()
-                    } label: {
+                    Button { startSigning() } label: {
                         HStack {
                             Spacer()
-                            Label("开始签名 🍩", systemImage: "checkmark.seal.fill")
-                                .font(.headline)
+                            Label("开始签名 🍩", systemImage: "checkmark.seal.fill").font(.headline)
                             Spacer()
                         }
                     }
-                    .disabled(pickedIPA == nil ||
-                              appState.selectedCertificate == nil ||
-                              appState.selectedProfile == nil)
+                    .disabled(pickedIPA == nil || appState.selectedCertificate == nil || appState.selectedProfile == nil)
                 }
             }
             .navigationTitle("甜甜签")
-            .fileImporter(isPresented: $showingPicker,
-                          allowedContentTypes: [.item],
-                          allowsMultipleSelection: false) { result in
-                handleImport(result)
-            }
-            .sheet(isPresented: $showingSigningSheet) {
-                if let runner = taskRunner {
-                    SigningProgressView(viewModel: runner)
+            .sheet(isPresented: $showingPicker) {
+                FilePicker(allowedContentTypes: [.data], allowsMultiple: false) { urls in
+                    handleURLs(urls)
                 }
             }
+            .sheet(isPresented: $showingSigningSheet) {
+                if let runner = taskRunner { SigningProgressView(viewModel: runner) }
+            }
             .alert("导入提示", isPresented: Binding(
-                get: { importError != nil },
-                set: { if !$0 { importError = nil } }
+                get: { importError != nil }, set: { if !$0 { importError = nil } }
             )) {
                 Button("好", role: .cancel) {}
             } message: {
@@ -114,26 +96,18 @@ struct HomeView: View {
         }
     }
 
-    private func handleImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .failure(let err):
-            importError = "选择文件失败：\(err.localizedDescription)"
-        case .success(let urls):
-            guard let url = urls.first else { return }
-            let scoped = url.startAccessingSecurityScopedResource()
-            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-            do {
-                let tmp = FileManager.default.temporaryDirectory
-                    .appendingPathComponent(url.lastPathComponent)
-                if FileManager.default.fileExists(atPath: tmp.path) {
-                    try FileManager.default.removeItem(at: tmp)
-                }
-                try FileManager.default.copyItem(at: url, to: tmp)
-                pickedIPA = try IPAParser.parse(ipazip: tmp)
-            } catch {
-                importError = "导入失败：\(error.localizedDescription)"
-                pickedIPA = nil
-            }
+    private func handleURLs(_ urls: [URL]) {
+        guard let url = urls.first else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
+            if FileManager.default.fileExists(atPath: tmp.path) { try FileManager.default.removeItem(at: tmp) }
+            try FileManager.default.copyItem(at: url, to: tmp)
+            pickedIPA = try IPAParser.parse(ipazip: tmp)
+        } catch {
+            importError = "导入失败：\(error.localizedDescription)"
+            pickedIPA = nil
         }
     }
 

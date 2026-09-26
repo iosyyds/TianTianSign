@@ -45,27 +45,9 @@ struct CertificateListView: View {
             .toolbar {
                 Button { showingImporter = true } label: { Image(systemName: "plus") }
             }
-            .fileImporter(isPresented: $showingImporter,
-                          allowedContentTypes: [.item],
-                          allowsMultipleSelection: false) { result in
-                switch result {
-                case .failure(let err):
-                    errorMsg = "选择文件失败：\(err.localizedDescription)"
-                case .success(let urls):
-                    guard let url = urls.first else { return }
-                    let scoped = url.startAccessingSecurityScopedResource()
-                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                    do {
-                        let tmp = FileManager.default.temporaryDirectory
-                            .appendingPathComponent(url.lastPathComponent)
-                        if FileManager.default.fileExists(atPath: tmp.path) {
-                            try FileManager.default.removeItem(at: tmp)
-                        }
-                        try FileManager.default.copyItem(at: url, to: tmp)
-                        pendingURL = tmp
-                    } catch {
-                        errorMsg = "导入 p12 失败：\(error.localizedDescription)"
-                    }
+            .sheet(isPresented: $showingImporter) {
+                FilePicker(allowedContentTypes: [.data], allowsMultiple: false) { urls in
+                    handleURLs(urls)
                 }
             }
             .alert("输入 p12 密码", isPresented: Binding(
@@ -93,6 +75,20 @@ struct CertificateListView: View {
             } message: {
                 Text(errorMsg ?? "")
             }
+        }
+    }
+
+    private func handleURLs(_ urls: [URL]) {
+        guard let url = urls.first else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
+            if FileManager.default.fileExists(atPath: tmp.path) { try FileManager.default.removeItem(at: tmp) }
+            try FileManager.default.copyItem(at: url, to: tmp)
+            pendingURL = tmp
+        } catch {
+            errorMsg = "导入 p12 失败：\(error.localizedDescription)"
         }
     }
 }
