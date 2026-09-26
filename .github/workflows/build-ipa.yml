@@ -14,6 +14,9 @@ permissions:
   contents: write
   issues: write
 
+env:
+  APP_VERSION: "0.1.1"
+
 jobs:
   build:
     runs-on: macos-14
@@ -107,13 +110,13 @@ jobs:
           mkdir -p build/Payload
           cp -R build/TianTianSign.xcarchive/Products/Applications/TianTianSign.app build/Payload/
           cd build
-          zip -r TianTianSign-unsigned.ipa Payload
+          zip -r "TianTianSign-${APP_VERSION}.ipa" Payload
 
       - name: Publish IPA to Release (no login needed)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest
-          name: 甜甜签 最新版
-          body: 自动构建，下载 TianTianSign-unsigned.ipa 后用 AltStore / Sideloadly / TrollStore 安装。
-          files: build/TianTianSign-unsigned.ipa
+          tag_name: v${{ env.APP_VERSION }}
+          name: 甜甜签 v${{ env.APP_VERSION }}
+          body: 下载 TianTianSign-${{ env.APP_VERSION }}.ipa 后用 AltStore / Sideloadly / TrollStore 安装。
+          files: build/TianTianSign-${{ env.APP_VERSION }}.ipa
           overwrite_files: true
