@@ -87,7 +87,7 @@ struct CertificateAddSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("文件") {
+                Section {
                     Button {
                         showingP12 = true
                     } label: {
@@ -100,10 +100,14 @@ struct CertificateAddSheet: View {
                         Label(profileURL?.lastPathComponent ?? "导入描述文件 (.mobileprovision)",
                               systemImage: "doc.text")
                     }
+                } header: {
+                    Text("文件")
                 }
 
-                Section("密码") {
+                Section {
                     SecureField("p12 密码（无密码留空）", text: $password)
+                } header: {
+                    Text("密码")
                 } footer: {
                     Text("输入私钥对应的密码，如果没有密码请留空。")
                 }
