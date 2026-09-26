@@ -20,7 +20,7 @@ class SigningViewModel: ObservableObject {
                 ipaURL: task.ipaURL,
                 p12URL: task.cert.p12URL,
                 password: CertificateImporter.readPassword(task.cert.id),
-                profileURL: task.profile.fileURL,
+                profileURL: task.cert.profileURL,
                 outputURL: task.outputURL,
                 newBundleID: task.newBundleID,
                 newName: task.newName

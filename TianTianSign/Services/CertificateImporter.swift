@@ -8,22 +8,24 @@ import Security
 
 enum CertError: Error, LocalizedError {
     case p12Failed(String)
+    case profileFailed(String)
     var errorDescription: String? {
         switch self {
         case .p12Failed(let m): return m
+        case .profileFailed(let m): return m
         }
     }
 }
 
 struct CertificateImporter {
 
-    /// 导入 p12：验证密码、复制文件到持久目录、返回证书信息
-    static func `import`(p12 srcURL: URL, password: String) throws -> SigningCertificate {
-        let data = try Data(contentsOf: srcURL)
-
+    /// 导入 p12 + mobileprovision 作为一对
+    static func `import`(p12 srcURL: URL, profile srcProfileURL: URL, password: String) throws -> SigningCertificate {
+        // 1. 验证 p12
+        let p12Data = try Data(contentsOf: srcURL)
         var items: CFArray?
         let options: [String: Any] = [kSecImportExportPassphrase as String: password]
-        let status = SecPKCS12Import(data as CFData, options as CFDictionary, &items)
+        let status = SecPKCS12Import(p12Data as CFData, options as CFDictionary, &items)
         guard status == errSecSuccess,
               let array = items as? [[String: Any]],
               let dict = array.first,
@@ -32,14 +34,11 @@ struct CertificateImporter {
         }
 
         var secCert: SecCertificate?
-        guard SecIdentityCopyCertificate(identity, &secCert) == errSecSuccess,
-              let cert = secCert else {
+        guard SecIdentityCopyCertificate(identity, &secCert) == errSecSuccess, let cert = secCert else {
             throw CertError.p12Failed("无法读取证书内容")
         }
 
         let summary = SecCertificateCopySubjectSummary(cert) as String? ?? "未知证书"
-
-        // 提取 teamID
         var teamID = ""
         var displayName = summary
         if let r = summary.range(of: #"\(([^)]+)\)"#, options: .regularExpression) {
@@ -47,14 +46,39 @@ struct CertificateImporter {
             displayName = summary.replacingOccurrences(of: String(summary[r]), with: "").trimmingCharacters(in: .whitespaces)
         }
 
-        // 复制到持久目录
-        let id = UUID()
-        let fileName = "\(id.uuidString).p12"
-        let dest = AppState.shared.certsDir.appendingPathComponent(fileName)
-        try? FileManager.default.removeItem(at: dest)
-        try data.write(to: dest)
+        // 2. 解析 mobileprovision
+        let profData = try Data(contentsOf: srcProfileURL)
+        guard let text = String(data: profData, encoding: .ascii),
+              let xmlStart = text.range(of: "<?xml"),
+              let xmlEnd = text.range(of: "</plist>") else {
+            throw CertError.profileFailed("描述文件格式错误")
+        }
+        let xml = String(text[xmlStart.lowerBound..<xmlEnd.upperBound])
+        guard let plistData = xml.data(using: .utf8),
+              let plist = try? PropertyListSerialization.propertyList(from: plistData, options: [], format: nil) as? [String: Any] else {
+            throw CertError.profileFailed("描述文件解析失败")
+        }
+        let profName = plist["Name"] as? String ?? "描述文件"
+        var bundleID = "*"
+        if let ent = plist["Entitlements"] as? [String: Any],
+           let appID = ent["application-identifier"] as? String {
+            let parts = appID.components(separatedBy: ".")
+            if parts.count > 1 { bundleID = parts.dropFirst().joined(separator: ".") }
+        }
+        let expiration = plist["ExpirationDate"] as? Date ?? Date().addingTimeInterval(365*24*3600)
 
-        // 存密码到 Keychain
+        // 3. 复制文件到持久目录
+        let id = UUID()
+        let p12FileName = "\(id.uuidString).p12"
+        let profFileName = "\(id.uuidString).mobileprovision"
+        let p12Dest = AppState.shared.certsDir.appendingPathComponent(p12FileName)
+        let profDest = AppState.shared.certsDir.appendingPathComponent(profFileName)
+        try? FileManager.default.removeItem(at: p12Dest)
+        try? FileManager.default.removeItem(at: profDest)
+        try p12Data.write(to: p12Dest)
+        try profData.write(to: profDest)
+
+        // 4. 存密码到 Keychain
         let pwQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrAccount as String: "cert_\(id.uuidString)",
@@ -65,12 +89,15 @@ struct CertificateImporter {
 
         return SigningCertificate(
             id: id,
-            p12Path: "Certificates/\(fileName)",
+            p12Path: "Certificates/\(p12FileName)",
+            profilePath: "Certificates/\(profFileName)",
             passwordHint: password.isEmpty ? "(无密码)" : "••••",
             commonName: summary,
             teamID: teamID,
             teamName: displayName,
-            validUntil: Calendar.current.date(byAdding: .year, value: 1, to: Date())!
+            validUntil: expiration,
+            profileName: profName,
+            profileBundleID: bundleID
         )
     }
 

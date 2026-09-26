@@ -10,7 +10,6 @@ struct SigningTask {
     let ipaURL: URL
     let ipaName: String
     let cert: SigningCertificate
-    let profile: ProvisioningProfile
     let newBundleID: String?
     let newName: String?
 

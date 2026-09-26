@@ -12,61 +12,7 @@ struct CertificatesView: View {
     var body: some View {
         NavigationStack {
             List {
-                // 证书列表
-                if !appState.certificates.isEmpty {
-                    Section("证书 (\(appState.certificates.count))") {
-                        ForEach(appState.certificates) { c in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Circle().fill(c.statusColor).frame(width: 8, height: 8)
-                                    Text(c.commonName).font(.subheadline).lineLimit(1)
-                                    Spacer()
-                                    if appState.selectedCertID == c.id {
-                                        Image(systemName: "checkmark.circle.fill").foregroundColor(.pink)
-                                    }
-                                }
-                                Text("Team: \(c.teamName) (\(c.teamID))")
-                                    .font(.caption2).foregroundColor(.secondary)
-                            }
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                appState.selectedCertID = c.id
-                                appState.save()
-                            }
-                        }
-                        .onDelete { appState.deleteCert(at: $0) }
-                    }
-                }
-
-                // 描述文件列表
-                if !appState.profiles.isEmpty {
-                    Section("描述文件 (\(appState.profiles.count))") {
-                        ForEach(appState.profiles) { p in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Circle().fill(p.statusColor).frame(width: 8, height: 8)
-                                    Text(p.name).font(.subheadline).lineLimit(1)
-                                    Spacer()
-                                    Text(p.typeLabel).font(.caption2).foregroundColor(.secondary)
-                                    if appState.selectedProfileID == p.id {
-                                        Image(systemName: "checkmark.circle.fill").foregroundColor(.pink)
-                                    }
-                                }
-                                Text("BundleID: \(p.bundleID)")
-                                    .font(.caption2).foregroundColor(.secondary)
-                            }
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                appState.selectedProfileID = p.id
-                                appState.save()
-                            }
-                        }
-                        .onDelete { appState.deleteProfile(at: $0) }
-                    }
-                }
-
-                // 空状态
-                if appState.certificates.isEmpty && appState.profiles.isEmpty {
+                if appState.certificates.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "person.badge.key")
                             .font(.system(size: 50))
@@ -91,6 +37,31 @@ struct CertificatesView: View {
                     }
                     .frame(maxWidth: .infinity, minHeight: 280)
                     .listRowSeparator(.hidden)
+                } else {
+                    Section("证书 (\(appState.certificates.count))") {
+                        ForEach(appState.certificates) { c in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Circle().fill(c.statusColor).frame(width: 8, height: 8)
+                                    Text(c.commonName).font(.subheadline).lineLimit(1)
+                                    Spacer()
+                                    if appState.selectedCertID == c.id {
+                                        Image(systemName: "checkmark.circle.fill").foregroundColor(.pink)
+                                    }
+                                }
+                                Text("描述文件: \(c.profileName)")
+                                    .font(.caption2).foregroundColor(.secondary)
+                                Text("BundleID: \(c.profileBundleID)")
+                                    .font(.caption2).foregroundColor(.secondary)
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                appState.selectedCertID = c.id
+                                appState.save()
+                            }
+                        }
+                        .onDelete { appState.deleteCert(at: $0) }
+                    }
                 }
             }
             .navigationTitle("证书")
@@ -138,7 +109,8 @@ struct AddCertSheet: View {
                         showingProfile = true
                     } label: {
                         HStack {
-                            Image(systemName: "doc.text").foregroundColor(.blue)
+                            Image(systemName: "doc.text")
+                                .foregroundColor(.blue)
                             Text(profileURL?.lastPathComponent ?? "选择 .mobileprovision 描述文件")
                                 .lineLimit(1)
                             Spacer()
@@ -159,13 +131,13 @@ struct AddCertSheet: View {
                             if isWorking {
                                 ProgressView()
                             } else {
-                                Text("导入")
+                                Text("导入证书")
                                     .fontWeight(.semibold)
                             }
                             Spacer()
                         }
                     }
-                    .disabled(p12URL == nil || isWorking)
+                    .disabled(p12URL == nil || profileURL == nil || isWorking)
                 }
             }
             .navigationTitle("导入证书")
@@ -196,27 +168,14 @@ struct AddCertSheet: View {
     }
 
     private func doImport() {
-        guard let p12URL = p12URL else { return }
+        guard let p12URL = p12URL, let profileURL = profileURL else { return }
         isWorking = true
 
         DispatchQueue.global(qos: .userInitiated).async {
             do {
-                // 导入 p12
-                let cert = try CertificateImporter.import(p12: p12URL, password: password)
-
-                // 导入描述文件（可选）
-                var profile: ProvisioningProfile? = nil
-                if let purl = profileURL {
-                    do {
-                        profile = try ProfileImporter.import(srcURL: purl)
-                    } catch {
-                        // 描述文件失败不阻止
-                    }
-                }
-
+                let cert = try CertificateImporter.import(p12: p12URL, profile: profileURL, password: password)
                 DispatchQueue.main.async {
                     appState.addCert(cert)
-                    if let p = profile { appState.addProfile(p) }
                     isWorking = false
                     dismiss()
                 }

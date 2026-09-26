@@ -1,7 +1,6 @@
 //
 //  LibraryView.swift
 //  TianTianSign
-//  应用列表 + 签名
 //
 
 import SwiftUI
@@ -44,7 +43,6 @@ struct LibraryView: View {
                     .frame(maxWidth: .infinity, minHeight: 280)
                     .listRowSeparator(.hidden)
                 } else {
-                    // 已选应用
                     Section("应用") {
                         HStack(spacing: 12) {
                             Image(systemName: "app.fill")
@@ -52,7 +50,7 @@ struct LibraryView: View {
                                 .foregroundColor(.pink)
                             VStack(alignment: .leading) {
                                 Text(pickedIPA!.appName).font(.headline)
-                                Text("\(pickedIPA!.bundleID) · \(pickedIPA!.sizeText)")
+                                Text("\(pickedIPA!.sizeText)")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
@@ -60,7 +58,6 @@ struct LibraryView: View {
                         }
                     }
 
-                    // 证书选择
                     Section("签名证书") {
                         Picker("证书", selection: $appState.selectedCertID) {
                             Text("未选择").tag(UUID?.none)
@@ -68,24 +65,12 @@ struct LibraryView: View {
                                 Text(c.commonName).tag(UUID?.some(c.id))
                             }
                         }
-                        Picker("描述文件", selection: $appState.selectedProfileID) {
-                            Text("未选择").tag(UUID?.none)
-                            ForEach(appState.profiles) { p in
-                                Text("\(p.name) (\(p.typeLabel))").tag(UUID?.some(p.id))
-                            }
-                        }
-
                         if appState.certificates.isEmpty {
-                            Text("请先到「证书」页导入 p12 证书")
-                                .font(.caption).foregroundColor(.orange)
-                        }
-                        if appState.profiles.isEmpty {
-                            Text("请先到「证书」页导入描述文件")
+                            Text("请先到「证书」页导入证书（p12 + 描述文件）")
                                 .font(.caption).foregroundColor(.orange)
                         }
                     }
 
-                    // 修改
                     Section("修改（可选）") {
                         TextField("新 Bundle ID", text: $newBundleID)
                             .autocorrectionDisabled(true)
@@ -93,7 +78,6 @@ struct LibraryView: View {
                         TextField("新显示名称", text: $newName)
                     }
 
-                    // 签名按钮
                     Section {
                         Button {
                             startSign()
@@ -106,7 +90,7 @@ struct LibraryView: View {
                                 Spacer()
                             }
                         }
-                        .disabled(appState.selectedCert == nil || appState.selectedProfile == nil)
+                        .disabled(appState.selectedCert == nil)
                     }
                 }
             }
@@ -139,16 +123,12 @@ struct LibraryView: View {
     }
 
     private func startSign() {
-        guard let ipa = pickedIPA,
-              let cert = appState.selectedCert,
-              let profile = appState.selectedProfile else { return }
-
+        guard let ipa = pickedIPA, let cert = appState.selectedCert else { return }
         let task = SigningTask(
             id: UUID(),
             ipaURL: ipa.fileURL,
             ipaName: ipa.fileName,
             cert: cert,
-            profile: profile,
             newBundleID: newBundleID.isEmpty ? nil : newBundleID,
             newName: newName.isEmpty ? nil : newName
         )
