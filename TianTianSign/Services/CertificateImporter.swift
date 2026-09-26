@@ -1,117 +1,99 @@
-//
-//  CertificateImporter.swift
-//  TianTianSign
-//
-
 import Foundation
-import Security
-
-enum CertError: Error, LocalizedError {
-    case p12Failed(String)
-    case profileFailed(String)
-    var errorDescription: String? {
-        switch self {
-        case .p12Failed(let m): return m
-        case .profileFailed(let m): return m
-        }
-    }
-}
+import UIKit
 
 struct CertificateImporter {
 
-    /// 导入 p12 + mobileprovision 作为一对
-    static func `import`(p12 srcURL: URL, profile srcProfileURL: URL, password: String) throws -> SigningCertificate {
-        // 1. 验证 p12
-        let p12Data = try Data(contentsOf: srcURL)
-        var items: CFArray?
-        let options: [String: Any] = [kSecImportExportPassphrase as String: password]
-        let status = SecPKCS12Import(p12Data as CFData, options as CFDictionary, &items)
-        guard status == errSecSuccess,
-              let array = items as? [[String: Any]],
-              let dict = array.first,
-              let identity = dict[kSecImportItemIdentity as String] as! SecIdentity? else {
-            throw CertError.p12Failed("p12 密码错误或文件损坏 (code: \(status))")
+    enum ImportError: Error, LocalizedError {
+        case invalidP12
+        case invalidProfile
+        case copyFailed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidP12: return "证书文件格式错误（请选择 .p12 文件）"
+            case .invalidProfile: return "描述文件格式错误（请选择 .mobileprovision 文件）"
+            case .copyFailed(let msg): return "文件保存失败：\(msg)"
+            }
+        }
+    }
+
+    static let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+
+    /// Import a pair of p12 + mobileprovision into Documents/certs/<uuid>/
+    /// - Returns: SigningCertificate with p12Path and profilePath
+    static func importPair(p12URL: URL, profileURL: URL) throws -> SigningCertificate {
+        // Validate by extension only — mobileprovision is CMS signed data, NOT a plist.
+        // Do NOT use PropertyListSerialization to check it; that rejects valid profiles.
+        let p12Ext = p12URL.pathExtension.lowercased()
+        guard p12Ext == "p12" || p12Ext == "p12b" else {
+            throw ImportError.invalidP12
         }
 
-        var secCert: SecCertificate?
-        guard SecIdentityCopyCertificate(identity, &secCert) == errSecSuccess, let cert = secCert else {
-            throw CertError.p12Failed("无法读取证书内容")
+        let profileExt = profileURL.pathExtension.lowercased()
+        guard profileExt == "mobileprovision" || profileExt == "provision" else {
+            throw ImportError.invalidProfile
         }
 
-        let summary = SecCertificateCopySubjectSummary(cert) as String? ?? "未知证书"
-        var teamID = ""
-        var displayName = summary
-        if let r = summary.range(of: #"\(([^)]+)\)"#, options: .regularExpression) {
-            teamID = String(summary[r]).trimmingCharacters(in: CharacterSet(charactersIn: "()"))
-            displayName = summary.replacingOccurrences(of: String(summary[r]), with: "").trimmingCharacters(in: .whitespaces)
+        // Create unique cert directory
+        let certID = UUID().uuidString
+        let certDir = documentsDir.appendingPathComponent("certs/\(certID)", isDirectory: true)
+        try FileManager.default.createDirectory(at: certDir, withIntermediateDirectories: true)
+
+        // Start accessing security-scoped resource
+        let p12NeedsStop = p12URL.startAccessingSecurityScopedResource()
+        defer { if p12NeedsStop { p12URL.stopAccessingSecurityScopedResource() } }
+
+        let profileNeedsStop = profileURL.startAccessingSecurityScopedResource()
+        defer { if profileNeedsStop { profileURL.stopAccessingSecurityScopedResource() } }
+
+        // Copy p12
+        let p12Dest = certDir.appendingPathComponent("cert.p12")
+        if FileManager.default.fileExists(atPath: p12Dest.path) {
+            try FileManager.default.removeItem(at: p12Dest)
+        }
+        do {
+            try FileManager.default.copyItem(at: p12URL, to: p12Dest)
+        } catch {
+            throw ImportError.copyFailed("p12: \(error.localizedDescription)")
         }
 
-        // 2. 解析 mobileprovision
-        let profData = try Data(contentsOf: srcProfileURL)
-        guard let text = String(data: profData, encoding: .ascii),
-              let xmlStart = text.range(of: "<?xml"),
-              let xmlEnd = text.range(of: "</plist>") else {
-            throw CertError.profileFailed("描述文件格式错误")
+        // Copy mobileprovision
+        let profileDest = certDir.appendingPathComponent("embedded.mobileprovision")
+        if FileManager.default.fileExists(atPath: profileDest.path) {
+            try FileManager.default.removeItem(at: profileDest)
         }
-        let xml = String(text[xmlStart.lowerBound..<xmlEnd.upperBound])
-        guard let plistData = xml.data(using: .utf8),
-              let plist = try? PropertyListSerialization.propertyList(from: plistData, options: [], format: nil) as? [String: Any] else {
-            throw CertError.profileFailed("描述文件解析失败")
+        do {
+            try FileManager.default.copyItem(at: profileURL, to: profileDest)
+        } catch {
+            throw ImportError.copyFailed("mobileprovision: \(error.localizedDescription)")
         }
-        let profName = plist["Name"] as? String ?? "描述文件"
-        var bundleID = "*"
-        if let ent = plist["Entitlements"] as? [String: Any],
-           let appID = ent["application-identifier"] as? String {
-            let parts = appID.components(separatedBy: ".")
-            if parts.count > 1 { bundleID = parts.dropFirst().joined(separator: ".") }
-        }
-        let expiration = plist["ExpirationDate"] as? Date ?? Date().addingTimeInterval(365*24*3600)
 
-        // 3. 复制文件到持久目录
-        let id = UUID()
-        let p12FileName = "\(id.uuidString).p12"
-        let profFileName = "\(id.uuidString).mobileprovision"
-        let p12Dest = AppState.shared.certsDir.appendingPathComponent(p12FileName)
-        let profDest = AppState.shared.certsDir.appendingPathComponent(profFileName)
-        try? FileManager.default.removeItem(at: p12Dest)
-        try? FileManager.default.removeItem(at: profDest)
-        try p12Data.write(to: p12Dest)
-        try profData.write(to: profDest)
-
-        // 4. 存密码到 Keychain
-        let pwQuery: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: "cert_\(id.uuidString)",
-            kSecValueData as String: password.data(using: .utf8)!
-        ]
-        SecItemDelete(pwQuery as CFDictionary)
-        SecItemAdd(pwQuery as CFDictionary, nil)
+        // Read profile name from embedded plist inside CMS data (best-effort display)
+        var displayName = "证书 \(Date().formatted(date: .abbreviated, time: .omitted))"
+        if let data = try? Data(contentsOf: profileDest),
+           let str = String(data: data, encoding: .ascii),
+           let bStart = str.range(of: "<plist"),
+           let bEnd = str.range(of: "</plist>") {
+            let plistStr = String(str[bStart.lowerBound..<bEnd.upperBound])
+            if let plData = plistStr.data(using: .utf8),
+               let plist = try? PropertyListSerialization.propertyList(from: plData, options: [], format: nil) as? [String: Any],
+               let name = plist["Name"] as? String {
+                displayName = name
+            }
+        }
 
         return SigningCertificate(
-            id: id,
-            p12Path: "Certificates/\(p12FileName)",
-            profilePath: "Certificates/\(profFileName)",
-            passwordHint: password.isEmpty ? "(无密码)" : "••••",
-            commonName: summary,
-            teamID: teamID,
-            teamName: displayName,
-            validUntil: expiration,
-            profileName: profName,
-            profileBundleID: bundleID
+            id: certID,
+            displayName: displayName,
+            p12Path: p12Dest.path,
+            profilePath: profileDest.path,
+            importedAt: Date()
         )
     }
 
-    static func readPassword(_ id: UUID) -> String {
-        let q: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrAccount as String: "cert_\(id.uuidString)",
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        var result: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess,
-              let d = result as? Data,
-              let s = String(data: d, encoding: .utf8) else { return "" }
-        return s
+    /// Delete a certificate pair from disk
+    static func deleteCertificate(_ cert: SigningCertificate) {
+        let dir = URL(fileURLWithPath: cert.p12Path).deletingLastPathComponent()
+        try? FileManager.default.removeItem(at: dir)
     }
 }
