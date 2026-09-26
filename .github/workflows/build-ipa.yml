@@ -66,7 +66,6 @@ jobs:
           ln -sf "$PWD/$OSSL_HEADERS" Pods/OpenSSL-Universal/include/openssl
 
       - name: Build .xcarchive (unsigned)
-        id: build
         run: |
           set -o pipefail
           DEVICE_FW="$PWD/Pods/OpenSSL-Universal/OpenSSL.xcframework/ios-arm64"
@@ -89,6 +88,7 @@ jobs:
           cp -R build/TianTianSign.xcarchive/Products/Applications/TianTianSign.app build/Payload/
           cd build
           zip -r "TianTianSign-${APP_VERSION}.ipa" Payload
+          ls -la
 
       - name: Publish IPA to Release (no login needed)
         uses: softprops/action-gh-release@v2
@@ -96,5 +96,5 @@ jobs:
           tag_name: v${{ env.APP_VERSION }}
           name: 甜甜签 v${{ env.APP_VERSION }}
           body: 下载 TianTianSign-${{ env.APP_VERSION }}.ipa 后用 AltStore / Sideloadly / TrollStore 安装。
-          files: build/TianTianSign-${APP_VERSION}.ipa
+          files: build/TianTianSign-${{ env.APP_VERSION }}.ipa
           overwrite_files: true
