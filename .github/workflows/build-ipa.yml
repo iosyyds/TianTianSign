@@ -15,7 +15,7 @@ permissions:
   issues: write
 
 env:
-  APP_VERSION: "0.1.5"
+  APP_VERSION: "0.1.6"
 
 jobs:
   build:
@@ -116,6 +116,6 @@ jobs:
         with:
           tag_name: v${{ env.APP_VERSION }}
           name: 甜甜签 v${{ env.APP_VERSION }}
-          body: 下载 TianTianSign-${{ env.APP_VERSION }}.ipa 后安装。
-          files: build/TianTianSign-${{ env.APP_VERSION }}.ipa
+          body: 下载 TianTianSign-${APP_VERSION}}.ipa 后安装。
+          files: build/TianTianSign-${APP_VERSION}.ipa
           overwrite_files: true
