@@ -1,182 +1,106 @@
-name: Build Unsigned IPA
+name: Build TianTianSign IPA
 
 on:
   push:
     branches: [main]
-    paths:
-      - "TianTianSign/**"
-      - "project.yml"
-      - "Podfile"
-      - ".github/workflows/build-ipa.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
-  issues: write
-
-env:
-  APP_VERSION: "0.1.6"
 
 jobs:
   build:
     runs-on: macos-14
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: |
-          XCODE_APP=$(ls -d /Applications/Xcode_*.app | tail -1)
-          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
-          xcodebuild -version
+      - name: Select Xcode 15
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
 
-      - name: Install tools
-        run: |
-          brew install xcodegen || true
-          brew install cocoapods || true
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-      - name: Create app icon
+      - name: Install Pillow
+        run: pip install Pillow
+
+      - name: Generate App Icon
         run: |
           set -e
-          mkdir -p TianTianSign/Assets.xcassets/AppIcon.appiconset
-          
-          # Create Contents.json for asset catalog
-          cat > TianTianSign/Assets.xcassets/Contents.json << 'EOF'
-          {
-            "info" : { "author" : "xcode", "version" : 1 }
-          }
-          EOF
-          
-          cat > TianTianSign/Assets.xcassets/AppIcon.appiconset/Contents.json << 'EOF'
+          ICON_DIR="TianTianSign/Assets.xcassets/AppIcon.appiconset"
+          mkdir -p "$ICON_DIR"
+          python3 - <<'PY'
+          from PIL import Image, ImageDraw, ImageFont
+          import os
+          size = 1024
+          img = Image.new('RGB', (size, size), '#0A84FF')
+          d = ImageDraw.Draw(img)
+          # feather shape
+          try:
+              font = ImageFont.truetype('/System/Library/Fonts/SFPro-Bold.otf', 420)
+          except:
+              font = ImageFont.load_default()
+          text = '签'
+          bbox = d.textbbox((0,0), text, font=font)
+          tw, th = bbox[2]-bbox[0], bbox[3]-bbox[1]
+          d.text(((size-tw)/2 - bbox[0], (size-th)/2 - bbox[1]), text, fill='white', font=font)
+          out = os.path.join('TianTianSign/Assets.xcassets/AppIcon.appiconset', 'icon-1024.png')
+          img.save(out, 'PNG')
+          print('Saved', out, os.path.getsize(out))
+          PY
+          ls -la "$ICON_DIR"
+
+      - name: Write Contents.json
+        working-directory: TianTianSign/Assets.xcassets
+        run: |
+          cat > AppIcon.appiconset/Contents.json <<'JSON'
           {
             "images" : [
-              { "filename" : "icon-1024.png", "idiom" : "ios", "platform" : "ios", "size" : "1024x1024" }
+              { "filename" : "icon-1024.png", "idiom" : "ios-marketing", "scale" : "1x" }
             ],
             "info" : { "author" : "xcode", "version" : 1 }
           }
-          EOF
-          
-          # Generate 1024x1024 pink icon with '签' text using Python
-          python3 << 'PYEOF'
-          from PIL import Image, ImageDraw, ImageFont
-          import os
-          
-          size = 1024
-          img = Image.new('RGB', (size, size), '#FF2D55')
-          draw = ImageDraw.Draw(img)
-          
-          # White circle background
-          draw.ellipse([40, 40, size-40, size-40], fill='white')
-          
-          # Pink rounded square in center
-          draw.rounded_rectangle([180, 180, size-180, size-180], radius=80, fill='#FF2D55')
-          
-          # Draw '签' text
-          font = None
-          for fp in ['/System/Library/Fonts/PingFang.ttc', '/System/Library/Fonts/STHeiti Medium.ttc', '/Library/Fonts/Arial Unicode.ttf']:
-              if os.path.exists(fp):
-                  try:
-                      font = ImageFont.truetype(fp, 360)
-                      break
-                  except:
-                      pass
-          if font is None:
-              font = ImageFont.load_default()
-          
-          text = '签'
-          bbox = draw.textbbox((0,0), text, font=font)
-          tw, th = bbox[2]-bbox[0], bbox[3]-bbox[1]
-          draw.text(((size-tw)//2, (size-th)//2 - bbox[1]), text, fill='white', font=font)
-          
-          img.save('TianTianSign/Assets.xcassets/AppIcon.appiconset/icon-1024.png')
-          print('Icon generated')
-          PYEOF
-          
-          ls -la TianTianSign/Assets.xcassets/AppIcon.appiconset/
+          JSON
+          cat AppIcon.appiconset/Contents.json
 
-      - name: Vendor zsign engine
-        run: |
-          set -e
-          git clone --depth 1 https://github.com/zhlynn/zsign.git /tmp/zsign
-          rm -rf SigningCore
-          mkdir -p SigningCore
-          cp -R /tmp/zsign/src/* SigningCore/
-          sed -i '' 's/^int main(int argc, char\* argv\[\])/extern "C" int zsign_main(int argc, char* argv[])/' SigningCore/zsign.cpp
-          cat > SigningCore/ios_bridge.cpp << 'BRIDGE'
-          #include <string>
-          #include <vector>
-          extern "C" int zsign_main(int argc, char* argv[]);
-          extern "C" int zsign_ios_run(int argc, const char** argv) {
-              std::vector<char*> args;
-              for (int i = 0; i < argc; i++) args.push_back((char*)argv[i]);
-              return zsign_main(argc, args.data());
-          }
-          BRIDGE
-          rm -f SigningCore/third-party/minizip/iowin32.c
+      - name: Install xcodegen
+        run: brew install xcodegen
 
-      - name: Generate Xcode project & install pods
+      - name: Clone zsign
+        run: git clone --depth 1 https://github.com/zhlynn/zsign.git SigningCore/zsign
+
+      - name: Generate Xcode project
         run: |
-          set -e
+          sed -i '' 's/APP_VERSION: .*/APP_VERSION: "0.1.7"/' project.yml
+          sed -i '' 's/CURRENT_PROJECT_VERSION: .*/CURRENT_PROJECT_VERSION: "9"/' project.yml
           xcodegen generate
-          pod install --repo-update
-          OSSL_HEADERS=$(find Pods/OpenSSL-Universal/OpenSSL.xcframework/ios-arm64 -type d -name Headers | head -1)
-          mkdir -p Pods/OpenSSL-Universal/include
-          rm -f Pods/OpenSSL-Universal/include/openssl
-          ln -sf "$PWD/$OSSL_HEADERS" Pods/OpenSSL-Universal/include/openssl
 
-      - name: Build .xcarchive (unsigned)
-        id: build
+      - name: Install CocoaPods
+        run: pod install
+
+      - name: Archive
         run: |
-          set -o pipefail
-          DEVICE_FW="$PWD/Pods/OpenSSL-Universal/OpenSSL.xcframework/ios-arm64"
           xcodebuild archive \
             -workspace TianTianSign.xcworkspace \
             -scheme TianTianSign \
             -configuration Release \
-            -destination 'generic/platform=iOS' \
             -archivePath build/TianTianSign.xcarchive \
-            FRAMEWORK_SEARCH_PATHS="$DEVICE_FW $(inherited)" \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee build.log
+            | xcpretty || true
 
-      - name: Report error as issue
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            let log = '';
-            try { log = fs.readFileSync('build.log', 'utf8'); } catch(e) {}
-            const errLines = log.split('\n').filter(l => /error:|fatal error|Undefined symbol|ld: |linker command failed/i.test(l));
-            const tail = log.split('\n').slice(-50).join('\n');
-            const body = '## Build error\n\n```\n' + (errLines.join('\n') || '(no error lines)') + '\n```\n\n## Tail\n\n```\n' + tail + '\n```';
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: 'CI build error - ' + new Date().toISOString(),
-              body: body.slice(0, 60000)
-            });
-
-      - name: Pack unsigned IPA
-        if: success()
+      - name: Package IPA
         run: |
-          set -e
           mkdir -p build/Payload
-          cp -R build/TianTianSign.xcarchive/Products/Applications/TianTianSign.app build/Payload/
-          cd build
-          zip -r "TianTianSign-${APP_VERSION}.ipa" Payload
-          ls -la
+          cp -r build/TianTianSign.xcarchive/Products/Applications/TianTianSign.app build/Payload/
+          cd build && zip -r TianTianSign-0.1.7.ipa Payload
 
-      - name: Publish IPA to Release
-        if: success()
+      - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ env.APP_VERSION }}
-          name: 甜甜签 v${{ env.APP_VERSION }}
-          body: |
-            重写版：p12+描述文件配对导入，签名时只需选证书。
-            下载 TianTianSign-${{ env.APP_VERSION }}.ipa 后安装。
-          files: build/TianTianSign-${{ env.APP_VERSION }}.ipa
-          overwrite_files: true
+          tag_name: v0.1.7
+          name: TianTianSign 0.1.7
+          files: build/TianTianSign-0.1.7.ipa
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
