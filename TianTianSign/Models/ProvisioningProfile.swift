@@ -8,7 +8,7 @@
 import Foundation
 import SwiftUI
 
-struct ProvisioningProfile: Identifiable, Hashable {
+struct ProvisioningProfile: Identifiable, Hashable, Codable {
     let id: UUID
     /// 本地文件 URL
     var fileURL: URL
