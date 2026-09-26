@@ -1,7 +1,6 @@
 //
 //  SettingsView.swift
 //  TianTianSign
-//  Feather-style settings.
 //
 
 import SwiftUI
@@ -9,19 +8,23 @@ import SwiftUI
 struct SettingsView: View {
     var body: some View {
         NavigationStack {
-            Form {
-                Section {
-                    LabeledContent("版本", value: "0.1.5")
-                    LabeledContent("签名引擎", value: "zsign")
-                } header: {
-                    Text("关于")
+            List {
+                Section("关于") {
+                    HStack {
+                        Text("版本")
+                        Spacer()
+                        Text("0.1.6").foregroundColor(.secondary)
+                    }
+                    HStack {
+                        Text("Bundle ID")
+                        Spacer()
+                        Text("com.tiantiansign.app").foregroundColor(.secondary).font(.caption)
+                    }
                 }
 
-                Section {
-                    Text("所有证书、描述文件和 IPA 仅保存在本设备中，不会上传到任何服务器。")
+                Section("输出目录") {
+                    Text("签名后的 IPA 保存在 App 的「文件」目录中。")
                         .font(.caption).foregroundColor(.secondary)
-                } header: {
-                    Text("隐私")
                 }
 
                 Section {

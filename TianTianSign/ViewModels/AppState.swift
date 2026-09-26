@@ -1,7 +1,6 @@
 //
 //  AppState.swift
 //  TianTianSign
-//  Persistent app state.
 //
 
 import Foundation
@@ -13,14 +12,21 @@ class AppState: ObservableObject {
 
     @Published var certificates: [SigningCertificate] = []
     @Published var profiles: [ProvisioningProfile] = []
-    @Published var library: [IPAFile] = []
-    @Published var recentTasks: [SigningTask] = []
+    @Published var importedIPAs: [IPAFile] = []
 
-    @Published var selectedCertificateID: UUID?
+    @Published var selectedCertID: UUID?
     @Published var selectedProfileID: UUID?
 
-    var selectedCertificate: SigningCertificate? {
-        guard let id = selectedCertificateID else { return nil }
+    var documents: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+    lazy var certsDir = documents.appendingPathComponent("Certificates", isDirectory: true)
+    lazy var profilesDir = documents.appendingPathComponent("Profiles", isDirectory: true)
+    lazy var ipaDir = documents.appendingPathComponent("ImportedIPAs", isDirectory: true)
+    lazy var outputDir = documents.appendingPathComponent("SignedOutput", isDirectory: true)
+
+    var selectedCert: SigningCertificate? {
+        guard let id = selectedCertID else { return nil }
         return certificates.first { $0.id == id }
     }
     var selectedProfile: ProvisioningProfile? {
@@ -28,80 +34,63 @@ class AppState: ObservableObject {
         return profiles.first { $0.id == id }
     }
 
-    let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-    lazy var certsDir = documents.appendingPathComponent("Certificates", isDirectory: true)
-    lazy var profilesDir = documents.appendingPathComponent("Profiles", isDirectory: true)
-    lazy var libraryDir = documents.appendingPathComponent("IPALibrary", isDirectory: true)
-    lazy var outputDir = documents.appendingPathComponent("Output", isDirectory: true)
-
     private init() {
-        [certsDir, profilesDir, libraryDir, outputDir].forEach {
+        [certsDir, profilesDir, ipaDir, outputDir].forEach {
             try? FileManager.default.createDirectory(at: $0, withIntermediateDirectories: true)
         }
         load()
     }
 
-    // MARK: - Persistence
-    private struct StoredState: Codable {
-        var certificates: [SigningCertificate]
+    // MARK: - Persistence (JSON)
+    private struct Stored: Codable {
+        var certs: [SigningCertificate]
         var profiles: [ProvisioningProfile]
-        var selectedCertificateID: UUID?
-        var selectedProfileID: UUID?
+        var selCert: UUID?
+        var selProfile: UUID?
     }
 
     private var stateURL: URL { documents.appendingPathComponent("state.json") }
 
     func save() {
-        let state = StoredState(
-            certificates: certificates,
-            profiles: profiles,
-            selectedCertificateID: selectedCertificateID,
-            selectedProfileID: selectedProfileID
-        )
-        if let data = try? JSONEncoder().encode(state) {
+        let s = Stored(certs: certificates, profiles: profiles, selCert: selectedCertID, selProfile: selectedProfileID)
+        if let data = try? JSONEncoder().encode(s) {
             try? data.write(to: stateURL)
         }
     }
 
     private func load() {
         guard let data = try? Data(contentsOf: stateURL),
-              let state = try? JSONDecoder().decode(StoredState.self, from: data) else { return }
-        certificates = state.certificates
-        profiles = state.profiles
-        selectedCertificateID = state.selectedCertificateID
-        selectedProfileID = state.selectedProfileID
+              let s = try? JSONDecoder().decode(Stored.self, from: data) else { return }
+        certificates = s.certs
+        profiles = s.profiles
+        selectedCertID = s.selCert
+        selectedProfileID = s.selProfile
     }
 
-    // MARK: - Helpers
-    func addCertificate(_ cert: SigningCertificate) {
-        certificates.append(cert)
-        if selectedCertificateID == nil {
-            selectedCertificateID = cert.id
-        }
+    // MARK: - CRUD
+    func addCert(_ c: SigningCertificate) {
+        certificates.append(c)
+        if selectedCertID == nil { selectedCertID = c.id }
         save()
     }
 
-    func addProfile(_ profile: ProvisioningProfile) {
-        profiles.append(profile)
-        if selectedProfileID == nil {
-            selectedProfileID = profile.id
-        }
+    func addProfile(_ p: ProvisioningProfile) {
+        profiles.append(p)
+        if selectedProfileID == nil { selectedProfileID = p.id }
         save()
     }
 
-    func deleteCertificate(at offsets: IndexSet) {
-        for index in offsets {
-            let cert = certificates[index]
-            try? FileManager.default.removeItem(at: cert.p12URL)
+    func deleteCert(at offsets: IndexSet) {
+        for i in offsets {
+            try? FileManager.default.removeItem(at: certificates[i].p12URL)
         }
         certificates.remove(atOffsets: offsets)
         save()
     }
 
     func deleteProfile(at offsets: IndexSet) {
-        for index in offsets {
-            let p = profiles[index]
-            try? FileManager.default.removeItem(at: p.fileURL)
+        for i in offsets {
+            try? FileManager.default.removeItem(at: profiles[i].fileURL)
         }
         profiles.remove(atOffsets: offsets)
         save()
