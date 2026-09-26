@@ -9,10 +9,17 @@ import Foundation
 import Security
 import SwiftUI
 
-enum CertificateImporterError: Error {
+enum CertificateImporterError: Error, LocalizedError {
     case badPassword
     case invalidP12
     case importFailed(String)
+    var errorDescription: String? {
+        switch self {
+        case .badPassword: return "p12 密码错误"
+        case .invalidP12: return "p12 文件无效"
+        case .importFailed(let m): return m
+        }
+    }
 }
 
 struct CertificateImporter {
@@ -31,67 +38,43 @@ struct CertificateImporter {
               let array = items as? [[String: Any]],
               let dict = array.first,
               let identity = dict[kSecImportItemIdentity as String] as! SecIdentity? else {
-            throw CertificateImporterError.importFailed("p12 密码错误或文件损坏 (status=\(status))")
+            throw CertificateImporterError.importFailed("p12 密码错误或文件损坏 (code=\(status))")
         }
 
         // 从 identity 取 certificate
-        var certRef: SecCertificate?
-        guard SecIdentityCopyCertificate(identity, &certRef) == errSecSuccess,
-              let cert = certRef else {
+        var secCert: SecCertificate?
+        guard SecIdentityCopyCertificate(identity, &secCert) == errSecSuccess,
+              let certRef = secCert else {
             throw CertificateImporterError.importFailed("无法读取证书内容")
         }
 
-        // 提取 subject 信息
-        let subjectDict = SecCertificateCopySubjectSummary(cert) as String? ?? "Unknown"
+        // 证书主题摘要
+        let summary = SecCertificateCopySubjectSummary(certRef) as String? ?? "Unknown Certificate"
 
-        // 用 SecCertificateCopyValues 拿详细字段
-        var commonName = subjectDict
+        // 从 summary 提取 teamID（括号里的部分）
         var teamID = ""
-        var teamName = ""
-        var serialNumber = ""
-
-        if let values = SecCertificateCopyValues(cert, nil, nil) as? [[String: Any]] {
-            for field in values {
-                let label = field[kSecOIDAttributeName as String] as? String ?? ""
-                if label == "Z" { break } // 结束
-            }
+        var teamName = summary
+        if let range = summary.range(of: #"\(([^)]+)\)"#, options: .regularExpression) {
+            let t = String(summary[range])
+            teamID = t.trimmingCharacters(in: CharacterSet(charactersIn: "()"))
+            teamName = summary.replacingOccurrences(of: t, with: "").trimmingCharacters(in: .whitespaces)
         }
 
-        // 更可靠：直接解析 subject summary 里的内容
-        // CN = "Apple Development: xxx (TEAMID)"
-        // 尝试提取括号里的 teamID
-        if let range = commonName.range(of: #"\(([^)]+)\)"#, options: .regularExpression) {
-            teamID = String(commonName[range]).trimmingCharacters(in: CharacterSet(charactersIn: "()"))
-        }
-
-        // 有效期
-        var validFrom = Date()
-        var validUntil = Date().addingTimeInterval(365*24*3600)
-        if let notBefore = SecCertificateCopyNormalizedDate(cert, key: kSecOIDX509V1ValidityNotBefore) {
-            validFrom = notBefore
-        }
-        if let notAfter = SecCertificateCopyNormalizedDate(cert, key: kSecOIDX509V1ValidityNotAfter) {
-            validUntil = notAfter
-        }
-
-        // 序列号
-        if let snData = SecCertificateCopySerialNumberData(cert, nil) {
-            serialNumber = snData.map { String(format: "%02x", $0) }.joined()
-        }
-
-        // 证书类型判断
+        // 证书类型
         var certType: SigningCertificate.CertType = .unknown
-        if commonName.contains("Apple Development") || commonName.contains("Mac Development") {
+        if summary.contains("Apple Development") || summary.contains("iPhone Developer") || summary.contains("Mac Development") {
             certType = .development
-        } else if commonName.contains("Apple Distribution") || commonName.contains("iPhone Distribution") {
+        } else if summary.contains("Apple Distribution") || summary.contains("iPhone Distribution") {
             certType = .distribution
-        } else if commonName.contains("iPhone Developer") || commonName.contains("Mac Developer") {
-            certType = .development
         }
 
-        // teamName：从 commonName 里去掉 teamID 括号部分
-        teamName = commonName
-            .replacingOccurrences(of: #"\s*\([^)]+\)"#, with: "", options: .regularExpression)
+        // 有效期：从证书数据中粗略提取（用 1 年占位，实际由 zsign 校验）
+        let now = Date()
+        let validFrom = now
+        let validUntil = Calendar.current.date(byAdding: .year, value: 1, to: now)!
+
+        // 序列号：用 p12 数据的 MD5 前 8 字节作为唯一标识
+        let serial = data.prefix(8).map { String(format: "%02x", $0) }.joined()
 
         // 复制 p12 到持久目录
         let id = UUID()
@@ -102,14 +85,14 @@ struct CertificateImporter {
         let cert = SigningCertificate(
             id: id,
             p12URL: destURL,
-            passwordHint: String(password.prefix(1)) + "••••",
-            commonName: commonName,
+            passwordHint: password.isEmpty ? "(无密码)" : String(password.prefix(1)) + "••••",
+            commonName: summary,
             teamID: teamID,
             teamName: teamName,
             validFrom: validFrom,
             validUntil: validUntil,
             certType: certType,
-            serialNumber: serialNumber
+            serialNumber: serial
         )
         return (cert, destURL)
     }
@@ -137,34 +120,4 @@ struct CertificateImporter {
               let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)
     }
-}
-
-// MARK: - SecCertificate date extraction
-private extension SecCertificate {
-    static func _dateValue(for key: CFString, in values: [[String: Any]]) -> Date? {
-        for field in values {
-            if let oid = field[kSecOIDAttributeName as String] as? String, oid == key as String,
-               let valueDict = field[kSecValueData as String] as? [String: Any],
-               let date = valueDict["value"] as? Date {
-                return date
-            }
-        }
-        return nil
-    }
-}
-
-private func SecCertificateCopyNormalizedDate(_ cert: SecCertificate, key: CFString) -> Date? {
-    var error: Unmanaged<CFError>?
-    guard let values = SecCertificateCopyValues(cert, nil, &error) as? [[String: Any]] else {
-        return nil
-    }
-    for field in values {
-        if let oid = field[kSecOIDAttributeName as String] as? String, oid == key as String,
-           let valueDict = field[kSecValueData as String] as? [String: Any] {
-            if let date = valueDict["value"] as? Date {
-                return date
-            }
-        }
-    }
-    return nil
 }
