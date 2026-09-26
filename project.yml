@@ -20,8 +20,8 @@ targets:
         CFBundleName: 甜甜签
         CFBundleDisplayName: 甜甜签
         CFBundleIdentifier: com.tiantiansign.app
-        CFBundleVersion: "4"
-        CFBundleShortVersionString: "0.1.3"
+        CFBundleVersion: "5"
+        CFBundleShortVersionString: "0.1.4"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -31,8 +31,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tiantiansign.app
-        MARKETING_VERSION: 0.1.3
-        CURRENT_PROJECT_VERSION: "4"
+        MARKETING_VERSION: 0.1.4
+        CURRENT_PROJECT_VERSION: "5"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
