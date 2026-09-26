@@ -1,7 +1,7 @@
 //
 //  CertificatesView.swift
 //  TianTianSign
-//  Feather-style certificates list with add sheet.
+//  证书列表 + 添加证书 sheet
 //
 
 import SwiftUI
@@ -15,19 +15,30 @@ struct CertificatesView: View {
         NavigationStack {
             List {
                 if appState.certificates.isEmpty {
-                    ContentUnavailableView {
-                        Label("没有证书", systemImage: "questionmark.folder")
-                    } description: {
-                        Text("导入你的第一个证书开始签名")
-                    } actions: {
+                    VStack(spacing: 16) {
+                        Image(systemName: "person.badge.key")
+                            .font(.system(size: 48))
+                            .foregroundColor(.secondary)
+                        Text("没有证书")
+                            .font(.headline)
+                        Text("导入你的 p12 证书和描述文件开始签名")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
                         Button {
                             showingAdd = true
                         } label: {
-                            Label("导入", systemImage: "plus")
+                            Text("导入证书")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 10)
+                                .background(Color.pink)
+                                .cornerRadius(20)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.pink)
                     }
+                    .frame(maxWidth: .infinity, minHeight: 300)
+                    .listRowSeparator(.hidden)
                 } else {
                     ForEach(appState.certificates) { c in
                         VStack(alignment: .leading, spacing: 6) {
@@ -49,10 +60,39 @@ struct CertificatesView: View {
                         .contentShape(Rectangle())
                         .onTapGesture {
                             appState.selectedCertificateID = c.id
+                            appState.save()
                         }
                     }
                     .onDelete { offsets in
-                        appState.certificates.remove(atOffsets: offsets)
+                        appState.deleteCertificate(at: offsets)
+                    }
+                }
+
+                // 描述文件 section
+                if !appState.profiles.isEmpty {
+                    Section("描述文件") {
+                        ForEach(appState.profiles) { p in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Circle().fill(p.statusColor).frame(width: 8, height: 8)
+                                    Text(p.appIDName).font(.subheadline)
+                                    Spacer()
+                                    Text(p.typeBadge).font(.caption).foregroundColor(.secondary)
+                                }
+                                Text("BundleID: \(p.bundleID)")
+                                    .font(.caption2).foregroundColor(.secondary)
+                                Text("有效期至 \(p.expirationDate.formatted(date: .abbreviated, time: .omitted))")
+                                    .font(.caption2).foregroundColor(p.statusColor)
+                            }
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                appState.selectedProfileID = p.id
+                                appState.save()
+                            }
+                        }
+                        .onDelete { offsets in
+                            appState.deleteProfile(at: offsets)
+                        }
                     }
                 }
             }
@@ -83,6 +123,7 @@ struct CertificateAddSheet: View {
     @State private var profileURL: URL?
     @State private var password = ""
     @State private var errorMsg: String?
+    @State private var isSaving = false
 
     var body: some View {
         NavigationStack {
@@ -91,14 +132,24 @@ struct CertificateAddSheet: View {
                     Button {
                         showingP12 = true
                     } label: {
-                        Label(p12URL?.lastPathComponent ?? "导入证书 (.p12)",
-                              systemImage: "person.badge.key")
+                        HStack {
+                            Image(systemName: "person.badge.key")
+                                .foregroundColor(.pink)
+                            Text(p12URL?.lastPathComponent ?? "选择证书 (.p12)")
+                                .lineLimit(1)
+                            Spacer()
+                        }
                     }
                     Button {
                         showingProfile = true
                     } label: {
-                        Label(profileURL?.lastPathComponent ?? "导入描述文件 (.mobileprovision)",
-                              systemImage: "doc.text")
+                        HStack {
+                            Image(systemName: "doc.text")
+                                .foregroundColor(.blue)
+                            Text(profileURL?.lastPathComponent ?? "选择描述文件 (.mobileprovision)")
+                                .lineLimit(1)
+                            Spacer()
+                        }
                     }
                 } header: {
                     Text("文件")
@@ -109,7 +160,7 @@ struct CertificateAddSheet: View {
                 } header: {
                     Text("密码")
                 } footer: {
-                    Text("输入私钥对应的密码，如果没有密码请留空。")
+                    Text("输入 p12 对应的密码，如果没有密码请留空。")
                 }
 
                 Section {
@@ -118,11 +169,16 @@ struct CertificateAddSheet: View {
                     } label: {
                         HStack {
                             Spacer()
-                            Text("保存")
+                            if isSaving {
+                                ProgressView()
+                            } else {
+                                Text("保存证书")
+                                    .fontWeight(.semibold)
+                            }
                             Spacer()
                         }
                     }
-                    .disabled(p12URL == nil || profileURL == nil)
+                    .disabled(p12URL == nil || isSaving)
                 }
             }
             .navigationTitle("新证书")
@@ -141,9 +197,6 @@ struct CertificateAddSheet: View {
             .sheet(isPresented: $showingProfile) {
                 FilePicker(allowedContentTypes: [.mobileProvision], allowsMultipleSelection: false) { urls in
                     profileURL = urls.first
-                    if let url = urls.first {
-                        importProfile(url)
-                    }
                 }
                 .ignoresSafeArea()
             }
@@ -157,33 +210,51 @@ struct CertificateAddSheet: View {
         }
     }
 
-    private func importProfile(_ url: URL) {
-        do {
-            let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
-            if FileManager.default.fileExists(atPath: tmp.path) {
-                try FileManager.default.removeItem(at: tmp)
-            }
-            try FileManager.default.copyItem(at: url, to: tmp)
-            if let p = try? ProfileParser.parse(fileURL: tmp) {
-                appState.profiles.append(p)
-            }
-        } catch {
-            errorMsg = "描述文件解析失败：\(error.localizedDescription)"
-        }
-    }
-
     private func save() {
         guard let p12URL = p12URL else { return }
-        do {
-            if let cert = try? CertificateImporter.inspect(p12: p12URL, password: password) {
-                CertificateImporter.storePassword(password, forCertificateID: cert.id)
-                appState.certificates.append(cert)
-                dismiss()
-            } else {
-                errorMsg = "p12 解析失败，请检查密码"
+        isSaving = true
+
+        // 在后台线程解析
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let result = try CertificateImporter.inspect(p12: p12URL, password: password)
+
+                // 保存密码到 Keychain
+                CertificateImporter.storePassword(password, forCertificateID: result.cert.id)
+
+                // 处理描述文件（可选但推荐）
+                var parsedProfile: ProvisioningProfile? = nil
+                if let profURL = profileURL {
+                    do {
+                        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(profURL.lastPathComponent)
+                        try? FileManager.default.removeItem(at: tmp)
+                        try FileManager.default.copyItem(at: profURL, to: tmp)
+                        var p = try ProfileParser.parse(fileURL: tmp)
+                        // 复制到持久目录
+                        let profDest = appState.profilesDir.appendingPathComponent("\(p.id.uuidString).mobileprovision")
+                        try? FileManager.default.removeItem(at: profDest)
+                        try FileManager.default.copyItem(at: tmp, to: profDest)
+                        p.fileURL = profDest
+                        parsedProfile = p
+                    } catch {
+                        // 描述文件失败不阻止证书保存
+                    }
+                }
+
+                DispatchQueue.main.async {
+                    appState.addCertificate(result.cert)
+                    if let p = parsedProfile {
+                        appState.addProfile(p)
+                    }
+                    isSaving = false
+                    dismiss()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    isSaving = false
+                    errorMsg = "导入失败：\(error.localizedDescription)"
+                }
             }
-        } catch {
-            errorMsg = error.localizedDescription
         }
     }
 }

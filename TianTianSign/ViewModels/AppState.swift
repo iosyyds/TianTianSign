@@ -71,4 +71,39 @@ class AppState: ObservableObject {
         selectedCertificateID = state.selectedCertificateID
         selectedProfileID = state.selectedProfileID
     }
+
+    // MARK: - Helpers
+    func addCertificate(_ cert: SigningCertificate) {
+        certificates.append(cert)
+        if selectedCertificateID == nil {
+            selectedCertificateID = cert.id
+        }
+        save()
+    }
+
+    func addProfile(_ profile: ProvisioningProfile) {
+        profiles.append(profile)
+        if selectedProfileID == nil {
+            selectedProfileID = profile.id
+        }
+        save()
+    }
+
+    func deleteCertificate(at offsets: IndexSet) {
+        for index in offsets {
+            let cert = certificates[index]
+            try? FileManager.default.removeItem(at: cert.p12URL)
+        }
+        certificates.remove(atOffsets: offsets)
+        save()
+    }
+
+    func deleteProfile(at offsets: IndexSet) {
+        for index in offsets {
+            let p = profiles[index]
+            try? FileManager.default.removeItem(at: p.fileURL)
+        }
+        profiles.remove(atOffsets: offsets)
+        save()
+    }
 }

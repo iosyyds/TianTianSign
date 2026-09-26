@@ -20,19 +20,29 @@ targets:
         CFBundleName: 甜甜签
         CFBundleDisplayName: 甜甜签
         CFBundleIdentifier: com.tiantiansign.app
-        CFBundleVersion: "7"
-        CFBundleShortVersionString: "0.1.5"
+        CFBundleVersion: "8"
+        CFBundleShortVersionString: "0.1.6"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         NSDocumentsFolderUsageDescription: 甜甜签需要访问「文件」App 来导入你自己的 IPA、证书 (.p12) 和描述文件 (.mobileprovision)。
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: "IPA 安装包"
+            CFBundleTypeExtensions: ["ipa"]
+            CFBundleTypeRole: "Viewer"
+          - CFBundleTypeName: "P12 证书"
+            CFBundleTypeExtensions: ["p12"]
+            CFBundleTypeRole: "Viewer"
+          - CFBundleTypeName: "描述文件"
+            CFBundleTypeExtensions: ["mobileprovision", "mobileproportion"]
+            CFBundleTypeRole: "Viewer"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tiantiansign.app
-        MARKETING_VERSION: 0.1.5
-        CURRENT_PROJECT_VERSION: "7"
+        MARKETING_VERSION: 0.1.6
+        CURRENT_PROJECT_VERSION: "8"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES

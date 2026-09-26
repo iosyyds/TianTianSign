@@ -1,7 +1,7 @@
 //
 //  LibraryView.swift
 //  TianTianSign
-//  Feather-style library.
+//  资料库页面：导入 IPA → 选证书/描述文件 → 签名
 //
 
 import SwiftUI
@@ -35,20 +35,43 @@ struct LibraryView: View {
                         }
                     }
 
-                    Section("签名") {
+                    Section("签名证书") {
                         Picker("证书", selection: $appState.selectedCertificateID) {
                             Text("未选择").tag(UUID?.none)
                             ForEach(appState.certificates) { c in
                                 Text(c.commonName).tag(UUID?.some(c.id))
                             }
                         }
+                        .onChange(of: appState.selectedCertificateID) { _, _ in
+                            appState.save()
+                        }
+                        Picker("描述文件", selection: $appState.selectedProfileID) {
+                            Text("未选择").tag(UUID?.none)
+                            ForEach(appState.profiles) { p in
+                                Text("\(p.appIDName) (\(p.typeBadge))").tag(UUID?.some(p.id))
+                            }
+                        }
+                        .onChange(of: appState.selectedProfileID) { _, _ in
+                            appState.save()
+                        }
+
                         if appState.certificates.isEmpty {
-                            Text("请到「证书」标签页导入证书")
-                                .font(.caption).foregroundColor(.secondary)
+                            Text("请先到「证书」页导入 p12 证书")
+                                .font(.caption).foregroundColor(.orange)
+                        } else if appState.selectedCertificate == nil {
+                            Text("请选择一个证书")
+                                .font(.caption).foregroundColor(.orange)
+                        }
+                        if appState.profiles.isEmpty {
+                            Text("请先到「证书」页导入描述文件")
+                                .font(.caption).foregroundColor(.orange)
+                        } else if appState.selectedProfile == nil {
+                            Text("请选择一个描述文件")
+                                .font(.caption).foregroundColor(.orange)
                         }
                     }
 
-                    Section("修改") {
+                    Section("修改（可选）") {
                         TextField("新 Bundle ID（留空不改）", text: $newBundleID)
                             .autocorrectionDisabled(true)
                             .textInputAutocapitalization(.never)
@@ -61,26 +84,39 @@ struct LibraryView: View {
                         } label: {
                             HStack {
                                 Spacer()
-                                Label("开始签名", systemImage: "signature")
+                                Image(systemName: "signature")
+                                Text("开始签名")
+                                    .fontWeight(.semibold)
                                 Spacer()
                             }
                         }
-                        .disabled(pickedIPA == nil || appState.selectedCertificate == nil || appState.selectedProfile == nil)
+                        .disabled(appState.selectedCertificate == nil || appState.selectedProfile == nil)
                     }
                 } else {
-                    ContentUnavailableView {
-                        Label("没有应用", systemImage: "questionmark.app.dashed")
-                    } description: {
-                        Text("导入你的 IPA 文件开始签名")
-                    } actions: {
+                    VStack(spacing: 16) {
+                        Image(systemName: "app.dashed")
+                            .font(.system(size: 48))
+                            .foregroundColor(.secondary)
+                        Text("没有应用")
+                            .font(.headline)
+                        Text("导入 IPA 文件开始签名")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
                         Button {
                             showingImport = true
                         } label: {
-                            Label("导入 IPA", systemImage: "square.and.arrow.down.on.square")
+                            Text("导入 IPA")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 10)
+                                .background(Color.pink)
+                                .cornerRadius(20)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.pink)
                     }
+                    .frame(maxWidth: .infinity, minHeight: 300)
+                    .listRowSeparator(.hidden)
                 }
             }
             .navigationTitle("资料库")
