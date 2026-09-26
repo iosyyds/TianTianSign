@@ -20,19 +20,57 @@ targets:
         CFBundleName: 甜甜签
         CFBundleDisplayName: 甜甜签
         CFBundleIdentifier: com.tiantiansign.app
-        CFBundleVersion: "1"
-        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "2"
+        CFBundleShortVersionString: "0.1.1"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UISupportsDocumentBrowser: true
         LSSupportsOpeningDocumentsInPlace: true
         NSDocumentsFolderUsageDescription: 甜甜签需要访问「文件」App 来导入你自己的 IPA、证书 (.p12) 和描述文件 (.mobileprovision)。
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: iOS App Archive
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.apple.unknown.extension.ipa
+          - CFBundleTypeName: PKCS12 Certificate
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.apple.unknown.extension.p12
+          - CFBundleTypeName: Provisioning Profile
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - com.apple.unknown.extension.mobileprovision
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: com.apple.unknown.extension.ipa
+            UTTypeDescription: iOS App Archive
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - ipa
+          - UTTypeIdentifier: com.apple.unknown.extension.p12
+            UTTypeDescription: PKCS12 Certificate
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - p12
+          - UTTypeIdentifier: com.apple.unknown.extension.mobileprovision
+            UTTypeDescription: Provisioning Profile
+            UTTypeConformsTo:
+              - public.data
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - mobileprovision
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tiantiansign.app
-        MARKETING_VERSION: 0.1.0
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: 0.1.1
+        CURRENT_PROJECT_VERSION: "2"
         SWIFT_VERSION: "5.9"
         TARGETED_DEVICE_FAMILY: "1"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
