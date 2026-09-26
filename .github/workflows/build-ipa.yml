@@ -35,6 +35,65 @@ jobs:
           brew install xcodegen || true
           brew install cocoapods || true
 
+      - name: Create app icon
+        run: |
+          set -e
+          mkdir -p TianTianSign/Assets.xcassets/AppIcon.appiconset
+          
+          # Create Contents.json for asset catalog
+          cat > TianTianSign/Assets.xcassets/Contents.json << 'EOF'
+          {
+            "info" : { "author" : "xcode", "version" : 1 }
+          }
+          EOF
+          
+          cat > TianTianSign/Assets.xcassets/AppIcon.appiconset/Contents.json << 'EOF'
+          {
+            "images" : [
+              { "filename" : "icon-1024.png", "idiom" : "ios", "platform" : "ios", "size" : "1024x1024" }
+            ],
+            "info" : { "author" : "xcode", "version" : 1 }
+          }
+          EOF
+          
+          # Generate 1024x1024 pink icon with '签' text using Python
+          python3 << 'PYEOF'
+          from PIL import Image, ImageDraw, ImageFont
+          import os
+          
+          size = 1024
+          img = Image.new('RGB', (size, size), '#FF2D55')
+          draw = ImageDraw.Draw(img)
+          
+          # White circle background
+          draw.ellipse([40, 40, size-40, size-40], fill='white')
+          
+          # Pink rounded square in center
+          draw.rounded_rectangle([180, 180, size-180, size-180], radius=80, fill='#FF2D55')
+          
+          # Draw '签' text
+          font = None
+          for fp in ['/System/Library/Fonts/PingFang.ttc', '/System/Library/Fonts/STHeiti Medium.ttc', '/Library/Fonts/Arial Unicode.ttf']:
+              if os.path.exists(fp):
+                  try:
+                      font = ImageFont.truetype(fp, 360)
+                      break
+                  except:
+                      pass
+          if font is None:
+              font = ImageFont.load_default()
+          
+          text = '签'
+          bbox = draw.textbbox((0,0), text, font=font)
+          tw, th = bbox[2]-bbox[0], bbox[3]-bbox[1]
+          draw.text(((size-tw)//2, (size-th)//2 - bbox[1]), text, fill='white', font=font)
+          
+          img.save('TianTianSign/Assets.xcassets/AppIcon.appiconset/icon-1024.png')
+          print('Icon generated')
+          PYEOF
+          
+          ls -la TianTianSign/Assets.xcassets/AppIcon.appiconset/
+
       - name: Vendor zsign engine
         run: |
           set -e
@@ -109,7 +168,6 @@ jobs:
           cd build
           zip -r "TianTianSign-${APP_VERSION}.ipa" Payload
           ls -la
-          echo "IPA_PATH=build/TianTianSign-${APP_VERSION}.ipa" >> $GITHUB_ENV
 
       - name: Publish IPA to Release
         if: success()
@@ -118,7 +176,7 @@ jobs:
           tag_name: v${{ env.APP_VERSION }}
           name: 甜甜签 v${{ env.APP_VERSION }}
           body: |
-            修复证书导入持久化、签名按钮、UI按钮显示等问题。
+            重写版：p12+描述文件配对导入，签名时只需选证书。
             下载 TianTianSign-${{ env.APP_VERSION }}.ipa 后安装。
           files: build/TianTianSign-${{ env.APP_VERSION }}.ipa
           overwrite_files: true
