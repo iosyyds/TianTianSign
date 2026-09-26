@@ -1,3 +1,8 @@
+//
+//  CertificateImporter.swift
+//  TianTianSign
+//
+
 import Foundation
 import UIKit
 
@@ -17,83 +22,104 @@ struct CertificateImporter {
         }
     }
 
-    static let documentsDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    /// Import p12 + mobileprovision pair. Matches the API used by CertificatesView.
+    static func `import`(p12: URL, profile: URL, password: String) throws -> SigningCertificate {
+        let p12Ext = p12.pathExtension.lowercased()
+        guard p12Ext == "p12" else { throw ImportError.invalidP12 }
 
-    /// Import a pair of p12 + mobileprovision into Documents/certs/<uuid>/
-    /// - Returns: SigningCertificate with p12Path and profilePath
-    static func importPair(p12URL: URL, profileURL: URL) throws -> SigningCertificate {
-        // Validate by extension only — mobileprovision is CMS signed data, NOT a plist.
-        // Do NOT use PropertyListSerialization to check it; that rejects valid profiles.
-        let p12Ext = p12URL.pathExtension.lowercased()
-        guard p12Ext == "p12" || p12Ext == "p12b" else {
-            throw ImportError.invalidP12
-        }
-
-        let profileExt = profileURL.pathExtension.lowercased()
+        let profileExt = profile.pathExtension.lowercased()
         guard profileExt == "mobileprovision" || profileExt == "provision" else {
             throw ImportError.invalidProfile
         }
 
-        // Create unique cert directory
-        let certID = UUID().uuidString
-        let certDir = documentsDir.appendingPathComponent("certs/\(certID)", isDirectory: true)
-        try FileManager.default.createDirectory(at: certDir, withIntermediateDirectories: true)
+        let id = UUID()
+        let docs = AppState.shared.documents
+        let certRelDir = "certs/\(id.uuidString)"
+        let fullDir = docs.appendingPathComponent(certRelDir, isDirectory: true)
+        try FileManager.default.createDirectory(at: fullDir, withIntermediateDirectories: true)
 
-        // Start accessing security-scoped resource
-        let p12NeedsStop = p12URL.startAccessingSecurityScopedResource()
-        defer { if p12NeedsStop { p12URL.stopAccessingSecurityScopedResource() } }
+        let p12Needs = p12.startAccessingSecurityScopedResource()
+        defer { if p12Needs { p12.stopAccessingSecurityScopedResource() } }
+        let profNeeds = profile.startAccessingSecurityScopedResource()
+        defer { if profNeeds { profile.stopAccessingSecurityScopedResource() } }
 
-        let profileNeedsStop = profileURL.startAccessingSecurityScopedResource()
-        defer { if profileNeedsStop { profileURL.stopAccessingSecurityScopedResource() } }
-
-        // Copy p12
-        let p12Dest = certDir.appendingPathComponent("cert.p12")
+        let p12Rel = "\(certRelDir)/cert.p12"
+        let p12Dest = docs.appendingPathComponent(p12Rel)
         if FileManager.default.fileExists(atPath: p12Dest.path) {
             try FileManager.default.removeItem(at: p12Dest)
         }
         do {
-            try FileManager.default.copyItem(at: p12URL, to: p12Dest)
+            try FileManager.default.copyItem(at: p12, to: p12Dest)
         } catch {
             throw ImportError.copyFailed("p12: \(error.localizedDescription)")
         }
 
-        // Copy mobileprovision
-        let profileDest = certDir.appendingPathComponent("embedded.mobileprovision")
-        if FileManager.default.fileExists(atPath: profileDest.path) {
-            try FileManager.default.removeItem(at: profileDest)
+        let profRel = "\(certRelDir)/embedded.mobileprovision"
+        let profDest = docs.appendingPathComponent(profRel)
+        if FileManager.default.fileExists(atPath: profDest.path) {
+            try FileManager.default.removeItem(at: profDest)
         }
         do {
-            try FileManager.default.copyItem(at: profileURL, to: profileDest)
+            try FileManager.default.copyItem(at: profile, to: profDest)
         } catch {
-            throw ImportError.copyFailed("mobileprovision: \(error.localizedDescription)")
+            throw ImportError.copyFailed("provision: \(error.localizedDescription)")
         }
 
-        // Read profile name from embedded plist inside CMS data (best-effort display)
-        var displayName = "证书 \(Date().formatted(date: .abbreviated, time: .omitted))"
-        if let data = try? Data(contentsOf: profileDest),
+        // mobileprovision is CMS signed data; the plist is embedded between <plist ...> and </plist>.
+        // Do NOT PropertyListSerialization the whole file.
+        var profileName = "描述文件"
+        var bundleID = "*"
+        var teamName = ""
+        var teamID = ""
+        var validUntil = Date().addingTimeInterval(365 * 24 * 3600)
+
+        if let data = try? Data(contentsOf: profDest),
            let str = String(data: data, encoding: .ascii),
            let bStart = str.range(of: "<plist"),
            let bEnd = str.range(of: "</plist>") {
             let plistStr = String(str[bStart.lowerBound..<bEnd.upperBound])
             if let plData = plistStr.data(using: .utf8),
-               let plist = try? PropertyListSerialization.propertyList(from: plData, options: [], format: nil) as? [String: Any],
-               let name = plist["Name"] as? String {
-                displayName = name
+               let plist = try? PropertyListSerialization.propertyList(from: plData, options: [], format: nil) as? [String: Any] {
+                if let name = plist["Name"] as? String { profileName = name }
+                if let ent = plist["Entitlements"] as? [String: Any],
+                   let bid = ent["application-identifier"] as? String {
+                    bundleID = bid.components(separatedBy: ".").dropFirst().joined(separator: ".")
+                }
+                if let tn = plist["TeamName"] as? String { teamName = tn }
+                if let teams = plist["TeamIdentifier"] as? [String] { teamID = teams.first ?? "" }
+                if let exp = plist["ExpirationDate"] as? Date { validUntil = exp }
             }
         }
 
+        // Save password
+        savePassword(password, for: id)
+
         return SigningCertificate(
-            id: certID,
-            displayName: displayName,
-            p12Path: p12Dest.path,
-            profilePath: profileDest.path,
-            importedAt: Date()
+            id: id,
+            p12Path: p12Rel,
+            profilePath: profRel,
+            passwordHint: password.isEmpty ? "无密码" : "已保存",
+            commonName: profileName,
+            teamID: teamID,
+            teamName: teamName,
+            validUntil: validUntil,
+            profileName: profileName,
+            profileBundleID: bundleID
         )
     }
 
-    /// Delete a certificate pair from disk
-    static func deleteCertificate(_ cert: SigningCertificate) {
-        let dir = URL(fileURLWithPath: cert.p12Path).deletingLastPathComponent()
-        try? FileManager.default.removeItem(at: dir)
+    static func readPassword(_ certID: UUID) -> String {
+        return loadPassword(for: certID) ?? ""
+    }
+
+    // MARK: - Password storage
+    private static let pwdKeyPrefix = "cert_pwd_"
+
+    private static func savePassword(_ pwd: String, for id: UUID) {
+        UserDefaults.standard.set(pwd, forKey: pwdKeyPrefix + id.uuidString)
+    }
+
+    private static func loadPassword(for id: UUID) -> String? {
+        return UserDefaults.standard.string(forKey: pwdKeyPrefix + id.uuidString)
     }
 }
