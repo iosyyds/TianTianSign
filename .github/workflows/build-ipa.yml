@@ -15,7 +15,7 @@ permissions:
   issues: write
 
 env:
-  APP_VERSION: "0.1.2"
+  APP_VERSION: "0.1.3"
 
 jobs:
   build:
@@ -82,13 +82,14 @@ jobs:
             PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee build.log
 
       - name: Report error as issue
-        if: steps.build.outcome == 'failure'
+        if: always()
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             let log = '';
             try { log = fs.readFileSync('build.log', 'utf8'); } catch(e) {}
+            if (steps.build.outcome === 'success') return;
             const errLines = log.split('\n').filter(l => /error:|fatal error|Undefined symbol|ld: |linker command failed/i.test(l));
             const tail = log.split('\n').slice(-40).join('\n');
             const body = '## Build error\n\n```\n' + (errLines.join('\n') || '(no error lines matched)') + '\n```\n\n## Tail\n\n```\n' + tail + '\n```';
