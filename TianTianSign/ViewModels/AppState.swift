@@ -1,8 +1,7 @@
 //
 //  AppState.swift
 //  TianTianSign
-//
-//  全局单例：持有证书 / 描述文件 / IPA 资料库
+//  Persistent app state.
 //
 
 import Foundation
@@ -17,7 +16,6 @@ class AppState: ObservableObject {
     @Published var library: [IPAFile] = []
     @Published var recentTasks: [SigningTask] = []
 
-    /// 当前选中的证书 / 描述文件（在签名页用）
     @Published var selectedCertificateID: UUID?
     @Published var selectedProfileID: UUID?
 
@@ -30,26 +28,47 @@ class AppState: ObservableObject {
         return profiles.first { $0.id == id }
     }
 
-    // MARK: - 沙盒目录
     let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     lazy var certsDir = documents.appendingPathComponent("Certificates", isDirectory: true)
     lazy var profilesDir = documents.appendingPathComponent("Profiles", isDirectory: true)
     lazy var libraryDir = documents.appendingPathComponent("IPALibrary", isDirectory: true)
     lazy var outputDir = documents.appendingPathComponent("Output", isDirectory: true)
-    lazy var tempDir = documents.appendingPathComponent("Temp", isDirectory: true)
 
     private init() {
-        [certsDir, profilesDir, libraryDir, outputDir, tempDir].forEach {
+        [certsDir, profilesDir, libraryDir, outputDir].forEach {
             try? FileManager.default.createDirectory(at: $0, withIntermediateDirectories: true)
         }
-        loadMetadata()
+        load()
     }
 
-    // MARK: - 持久化元信息
-    private var metaURL: URL { documents.appendingPathComponent("state.json") }
-
-    func saveMetadata() {
-        // 真正的 p12 / mobileprovision 本体留在沙盒，这里只存索引
+    // MARK: - Persistence
+    private struct StoredState: Codable {
+        var certificates: [SigningCertificate]
+        var profiles: [ProvisioningProfile]
+        var selectedCertificateID: UUID?
+        var selectedProfileID: UUID?
     }
-    func loadMetadata() {}
+
+    private var stateURL: URL { documents.appendingPathComponent("state.json") }
+
+    func save() {
+        let state = StoredState(
+            certificates: certificates,
+            profiles: profiles,
+            selectedCertificateID: selectedCertificateID,
+            selectedProfileID: selectedProfileID
+        )
+        if let data = try? JSONEncoder().encode(state) {
+            try? data.write(to: stateURL)
+        }
+    }
+
+    private func load() {
+        guard let data = try? Data(contentsOf: stateURL),
+              let state = try? JSONDecoder().decode(StoredState.self, from: data) else { return }
+        certificates = state.certificates
+        profiles = state.profiles
+        selectedCertificateID = state.selectedCertificateID
+        selectedProfileID = state.selectedProfileID
+    }
 }
