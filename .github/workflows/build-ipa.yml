@@ -25,6 +25,9 @@ jobs:
       - name: Install Pillow
         run: pip install Pillow
 
+      - name: Install xcpretty
+        run: sudo gem install xcpretty
+
       - name: Generate App Icon
         run: |
           set -e
@@ -36,10 +39,9 @@ jobs:
           size = 1024
           img = Image.new('RGB', (size, size), '#0A84FF')
           d = ImageDraw.Draw(img)
-          # feather shape
           try:
               font = ImageFont.truetype('/System/Library/Fonts/SFPro-Bold.otf', 420)
-          except:
+          except Exception:
               font = ImageFont.load_default()
           text = '签'
           bbox = d.textbbox((0,0), text, font=font)
@@ -52,9 +54,8 @@ jobs:
           ls -la "$ICON_DIR"
 
       - name: Write Contents.json
-        working-directory: TianTianSign/Assets.xcassets
         run: |
-          cat > AppIcon.appiconset/Contents.json <<'JSON'
+          cat > TianTianSign/Assets.xcassets/AppIcon.appiconset/Contents.json <<'JSON'
           {
             "images" : [
               { "filename" : "icon-1024.png", "idiom" : "ios-marketing", "scale" : "1x" }
@@ -62,7 +63,6 @@ jobs:
             "info" : { "author" : "xcode", "version" : 1 }
           }
           JSON
-          cat AppIcon.appiconset/Contents.json
 
       - name: Install xcodegen
         run: brew install xcodegen
@@ -70,30 +70,35 @@ jobs:
       - name: Clone zsign
         run: git clone --depth 1 https://github.com/zhlynn/zsign.git SigningCore/zsign
 
-      - name: Generate Xcode project
+      - name: Bump version
         run: |
-          sed -i '' 's/APP_VERSION: .*/APP_VERSION: "0.1.7"/' project.yml
-          sed -i '' 's/CURRENT_PROJECT_VERSION: .*/CURRENT_PROJECT_VERSION: "9"/' project.yml
-          xcodegen generate
+          if [ -f project.yml ]; then
+            sed -i '' 's/0\.1\.[0-9]*/0.1.7/g' project.yml || true
+          fi
+          cat project.yml | grep -i version || true
+
+      - name: Generate Xcode project
+        run: xcodegen generate
 
       - name: Install CocoaPods
         run: pod install
 
       - name: Archive
         run: |
+          set -o pipefail
           xcodebuild archive \
             -workspace TianTianSign.xcworkspace \
             -scheme TianTianSign \
             -configuration Release \
             -archivePath build/TianTianSign.xcarchive \
-            CODE_SIGNING_ALLOWED=NO \
-            | xcpretty || true
+            CODE_SIGNING_ALLOWED=NO | xcpretty
 
       - name: Package IPA
         run: |
           mkdir -p build/Payload
           cp -r build/TianTianSign.xcarchive/Products/Applications/TianTianSign.app build/Payload/
           cd build && zip -r TianTianSign-0.1.7.ipa Payload
+          ls -la TianTianSign-0.1.7.ipa
 
       - name: Release
         uses: softprops/action-gh-release@v2
