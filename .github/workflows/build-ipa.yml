@@ -35,42 +35,6 @@ jobs:
           brew install xcodegen || true
           brew install cocoapods || true
 
-      - name: Install Pillow
-        run: pip3 install --break-system-packages Pillow
-
-      - name: Generate App Icon
-        run: |
-          set -e
-          ICON_DIR="TianTianSign/Assets.xcassets/AppIcon.appiconset"
-          mkdir -p "$ICON_DIR"
-          python3 - <<'PY'
-          from PIL import Image, ImageDraw, ImageFont
-          import os
-          size = 1024
-          img = Image.new('RGB', (size, size), '#0A84FF')
-          d = ImageDraw.Draw(img)
-          try:
-              font = ImageFont.truetype('/System/Library/Fonts/SFPro-Bold.otf', 420)
-          except Exception:
-              font = ImageFont.load_default()
-          text = '签'
-          bbox = d.textbbox((0,0), text, font=font)
-          tw, th = bbox[2]-bbox[0], bbox[3]-bbox[1]
-          d.text(((size-tw)/2 - bbox[0], (size-th)/2 - bbox[1]), text, fill='white', font=font)
-          out = os.path.join('$ICON_DIR', 'icon-1024.png')
-          img.save(out, 'PNG')
-          print('Saved', out, os.path.getsize(out))
-          PY
-          cat > "$ICON_DIR/Contents.json" <<'JSON'
-          {
-            "images" : [
-              { "filename" : "icon-1024.png", "idiom" : "ios-marketing", "scale" : "1x" }
-            ],
-            "info" : { "author" : "xcode", "version" : 1 }
-          }
-          JSON
-          ls -la "$ICON_DIR"
-
       - name: Vendor zsign engine
         run: |
           set -e
