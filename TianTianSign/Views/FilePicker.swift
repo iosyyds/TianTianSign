@@ -1,50 +1,52 @@
 //
 //  FilePicker.swift
 //  TianTianSign
-//  UIKit UIDocumentPickerViewController wrapper (like Feather).
+//  Exact copy of Feather's FileImporterRepresentableView.
 //
 
 import SwiftUI
-import UIKit
 import UniformTypeIdentifiers
 
 struct FilePicker: UIViewControllerRepresentable {
-    let allowedContentTypes: [UTType]
-    let allowsMultiple: Bool
-    let onPicked: ([URL]) -> Void
+    var allowedContentTypes: [UTType]
+    var allowsMultipleSelection: Bool = false
+    var onDocumentsPicked: ([URL]) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onDocumentsPicked: onDocumentsPicked)
+    }
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: allowedContentTypes, asCopy: true)
         picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = allowsMultiple
+        picker.allowsMultipleSelection = allowsMultipleSelection
         return picker
     }
 
     func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
 
-    func makeCoordinator() -> Coordinator { Coordinator(onPicked: onPicked) }
-
     class Coordinator: NSObject, UIDocumentPickerDelegate {
-        let onPicked: ([URL]) -> Void
-        init(onPicked: @escaping ([URL]) -> Void) { self.onPicked = onPicked }
-
-        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            onPicked(urls)
+        var onDocumentsPicked: ([URL]) -> Void
+        init(onDocumentsPicked: @escaping ([URL]) -> Void) {
+            self.onDocumentsPicked = onDocumentsPicked
         }
-
-        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {}
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            onDocumentsPicked(urls)
+        }
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            onDocumentsPicked([])
+        }
     }
 }
 
-// MARK: - Convenience content types
 extension UTType {
     static var ipa: UTType {
-        UTType(filenameExtension: "ipa") ?? .data
+        UTType(filenameExtension: "ipa", conformingTo: .data) ?? .data
     }
     static var p12: UTType {
-        UTType(filenameExtension: "p12") ?? .data
+        UTType(filenameExtension: "p12", conformingTo: .data) ?? .data
     }
     static var mobileProvision: UTType {
-        UTType(filenameExtension: "mobileprovision") ?? .data
+        UTType(filenameExtension: "mobileprovision", conformingTo: .data) ?? .data
     }
 }
