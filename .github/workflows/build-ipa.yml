@@ -109,6 +109,7 @@ jobs:
           cd build
           zip -r "TianTianSign-${APP_VERSION}.ipa" Payload
           ls -la
+          echo "IPA_PATH=build/TianTianSign-${APP_VERSION}.ipa" >> $GITHUB_ENV
 
       - name: Publish IPA to Release
         if: success()
@@ -116,6 +117,8 @@ jobs:
         with:
           tag_name: v${{ env.APP_VERSION }}
           name: 甜甜签 v${{ env.APP_VERSION }}
-          body: 下载 TianTianSign-${APP_VERSION}}.ipa 后安装。
-          files: build/TianTianSign-${APP_VERSION}.ipa
+          body: |
+            修复证书导入持久化、签名按钮、UI按钮显示等问题。
+            下载 TianTianSign-${{ env.APP_VERSION }}.ipa 后安装。
+          files: build/TianTianSign-${{ env.APP_VERSION }}.ipa
           overwrite_files: true
