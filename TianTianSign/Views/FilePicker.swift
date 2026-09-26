@@ -1,8 +1,7 @@
 //
 //  FilePicker.swift
 //  TianTianSign
-//
-//  UIKit UIDocumentPickerViewController wrapper, like Feather/KSign.
+//  UIKit UIDocumentPickerViewController wrapper (like Feather).
 //
 
 import SwiftUI
@@ -28,7 +27,24 @@ struct FilePicker: UIViewControllerRepresentable {
     class Coordinator: NSObject, UIDocumentPickerDelegate {
         let onPicked: ([URL]) -> Void
         init(onPicked: @escaping ([URL]) -> Void) { self.onPicked = onPicked }
-        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) { onPicked(urls) }
+
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            onPicked(urls)
+        }
+
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {}
+    }
+}
+
+// MARK: - Convenience content types
+extension UTType {
+    static var ipa: UTType {
+        UTType(filenameExtension: "ipa") ?? .data
+    }
+    static var p12: UTType {
+        UTType(filenameExtension: "p12") ?? .data
+    }
+    static var mobileProvision: UTType {
+        UTType(filenameExtension: "mobileprovision") ?? .data
     }
 }
