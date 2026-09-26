@@ -15,7 +15,7 @@ permissions:
   issues: write
 
 env:
-  APP_VERSION: "0.1.1"
+  APP_VERSION: "0.1.2"
 
 jobs:
   build:
@@ -118,5 +118,5 @@ jobs:
           tag_name: v${{ env.APP_VERSION }}
           name: 甜甜签 v${{ env.APP_VERSION }}
           body: 下载 TianTianSign-${{ env.APP_VERSION }}.ipa 后用 AltStore / Sideloadly / TrollStore 安装。
-          files: build/TianTianSign-${{ env.APP_VERSION }}.ipa
+          files: build/TianTianSign-${APP_VERSION}}.ipa
           overwrite_files: true
