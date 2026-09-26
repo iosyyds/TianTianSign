@@ -1,32 +1,40 @@
-name: Build TianTianSign IPA
+name: Build Unsigned IPA
 
 on:
   push:
     branches: [main]
+    paths:
+      - "TianTianSign/**"
+      - "project.yml"
+      - "Podfile"
+      - ".github/workflows/build-ipa.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
+  issues: write
+
+env:
+  APP_VERSION: "0.1.7"
 
 jobs:
   build:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Select Xcode 15
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+      - name: Select Xcode
+        run: |
+          XCODE_APP=$(ls -d /Applications/Xcode_*.app | tail -1)
+          sudo xcode-select -s "$XCODE_APP/Contents/Developer"
+          xcodebuild -version
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install Pillow
-        run: pip install Pillow
-
-      - name: Install xcpretty
-        run: sudo gem install xcpretty
+      - name: Install tools
+        run: |
+          brew install xcodegen || true
+          brew install cocoapods || true
+          pip3 install Pillow
 
       - name: Generate App Icon
         run: |
@@ -47,15 +55,11 @@ jobs:
           bbox = d.textbbox((0,0), text, font=font)
           tw, th = bbox[2]-bbox[0], bbox[3]-bbox[1]
           d.text(((size-tw)/2 - bbox[0], (size-th)/2 - bbox[1]), text, fill='white', font=font)
-          out = os.path.join('TianTianSign/Assets.xcassets/AppIcon.appiconset', 'icon-1024.png')
+          out = os.path.join('$ICON_DIR', 'icon-1024.png')
           img.save(out, 'PNG')
           print('Saved', out, os.path.getsize(out))
           PY
-          ls -la "$ICON_DIR"
-
-      - name: Write Contents.json
-        run: |
-          cat > TianTianSign/Assets.xcassets/AppIcon.appiconset/Contents.json <<'JSON'
+          cat > "$ICON_DIR/Contents.json" <<'JSON'
           {
             "images" : [
               { "filename" : "icon-1024.png", "idiom" : "ios-marketing", "scale" : "1x" }
@@ -63,49 +67,89 @@ jobs:
             "info" : { "author" : "xcode", "version" : 1 }
           }
           JSON
+          ls -la "$ICON_DIR"
 
-      - name: Install xcodegen
-        run: brew install xcodegen
-
-      - name: Clone zsign
-        run: git clone --depth 1 https://github.com/zhlynn/zsign.git SigningCore/zsign
-
-      - name: Bump version
+      - name: Vendor zsign engine
         run: |
-          if [ -f project.yml ]; then
-            sed -i '' 's/0\.1\.[0-9]*/0.1.7/g' project.yml || true
-          fi
-          cat project.yml | grep -i version || true
+          set -e
+          git clone --depth 1 https://github.com/zhlynn/zsign.git /tmp/zsign
+          rm -rf SigningCore
+          mkdir -p SigningCore
+          cp -R /tmp/zsign/src/* SigningCore/
+          sed -i '' 's/^int main(int argc, char\* argv\[\])/extern "C" int zsign_main(int argc, char* argv[])/' SigningCore/zsign.cpp
+          cat > SigningCore/ios_bridge.cpp << 'BRIDGE'
+          #include <string>
+          #include <vector>
+          extern "C" int zsign_main(int argc, char* argv[]);
+          extern "C" int zsign_ios_run(int argc, const char** argv) {
+              std::vector<char*> args;
+              for (int i = 0; i < argc; i++) args.push_back((char*)argv[i]);
+              return zsign_main(argc, args.data());
+          }
+          BRIDGE
+          rm -f SigningCore/third-party/minizip/iowin32.c
 
-      - name: Generate Xcode project
-        run: xcodegen generate
+      - name: Generate Xcode project & install pods
+        run: |
+          set -e
+          xcodegen generate
+          pod install --repo-update
+          OSSL_HEADERS=$(find Pods/OpenSSL-Universal/OpenSSL.xcframework/ios-arm64 -type d -name Headers | head -1)
+          mkdir -p Pods/OpenSSL-Universal/include
+          rm -f Pods/OpenSSL-Universal/include/openssl
+          ln -sf "$PWD/$OSSL_HEADERS" Pods/OpenSSL-Universal/include/openssl
 
-      - name: Install CocoaPods
-        run: pod install
-
-      - name: Archive
+      - name: Build .xcarchive (unsigned)
+        id: build
         run: |
           set -o pipefail
+          DEVICE_FW="$PWD/Pods/OpenSSL-Universal/OpenSSL.xcframework/ios-arm64"
           xcodebuild archive \
             -workspace TianTianSign.xcworkspace \
             -scheme TianTianSign \
             -configuration Release \
+            -destination 'generic/platform=iOS' \
             -archivePath build/TianTianSign.xcarchive \
-            CODE_SIGNING_ALLOWED=NO | xcpretty
+            FRAMEWORK_SEARCH_PATHS="$DEVICE_FW $(inherited)" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee build.log
 
-      - name: Package IPA
+      - name: Report error as issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync('build.log', 'utf8'); } catch(e) {}
+            const errLines = log.split('\n').filter(l => /error:|fatal error|Undefined symbol|ld: |linker command failed/i.test(l));
+            const tail = log.split('\n').slice(-50).join('\n');
+            const body = '## Build error\n\n```\n' + (errLines.join('\n') || '(no error lines)') + '\n```\n\n## Tail\n\n```\n' + tail + '\n```';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'CI build error - ' + new Date().toISOString(),
+              body: body.slice(0, 60000)
+            });
+
+      - name: Pack unsigned IPA
+        if: success()
         run: |
+          set -e
           mkdir -p build/Payload
-          cp -r build/TianTianSign.xcarchive/Products/Applications/TianTianSign.app build/Payload/
-          cd build && zip -r TianTianSign-0.1.7.ipa Payload
-          ls -la TianTianSign-0.1.7.ipa
+          cp -R build/TianTianSign.xcarchive/Products/Applications/TianTianSign.app build/Payload/
+          cd build
+          zip -r "TianTianSign-${APP_VERSION}.ipa" Payload
+          ls -la
 
-      - name: Release
+      - name: Publish IPA to Release
+        if: success()
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.7
-          name: TianTianSign 0.1.7
-          files: build/TianTianSign-0.1.7.ipa
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: v${{ env.APP_VERSION }}
+          name: 甜甜签 v${{ env.APP_VERSION }}
+          body: 修复描述文件格式错误 + 修复应用图标。下载 TianTianSign-${APP_VERSION}.ipa 后安装。
+          files: build/TianTianSign-${APP_VERSION}.ipa
+          overwrite_files: true
