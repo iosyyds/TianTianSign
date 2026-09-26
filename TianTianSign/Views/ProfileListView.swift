@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 struct ProfileListView: View {
     @EnvironmentObject var appState: AppState
     @State private var showingImporter = false
+    @State private var errorMsg: String?
 
     var body: some View {
         NavigationStack {
@@ -31,10 +32,6 @@ struct ProfileListView: View {
                         Text("Team：\(p.teamName) (\(p.teamID))").font(.caption)
                         Text("过期：\(p.expirationDate.formatted(date: .abbreviated, time: .omitted)) · 剩 \(p.daysRemaining) 天")
                             .font(.caption).foregroundColor(p.statusColor)
-                        if !p.provisionsDevices.isEmpty {
-                            Text("绑定 \(p.provisionsDevices.count) 台设备")
-                                .font(.caption2).foregroundColor(.secondary)
-                        }
                     }.padding(.vertical, 4)
                 }.onDelete { appState.profiles.remove(atOffsets: $0) }
             }
@@ -45,20 +42,37 @@ struct ProfileListView: View {
             .fileImporter(isPresented: $showingImporter,
                           allowedContentTypes: [.item],
                           allowsMultipleSelection: false) { result in
-                guard case .success(let urls) = result, let url = urls.first else { return }
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                do {
-                    let tmp = FileManager.default.temporaryDirectory
-                        .appendingPathComponent(url.lastPathComponent)
-                    if FileManager.default.fileExists(atPath: tmp.path) {
-                        try FileManager.default.removeItem(at: tmp)
+                switch result {
+                case .failure(let err):
+                    errorMsg = "选择文件失败：\(err.localizedDescription)"
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    do {
+                        let tmp = FileManager.default.temporaryDirectory
+                            .appendingPathComponent(url.lastPathComponent)
+                        if FileManager.default.fileExists(atPath: tmp.path) {
+                            try FileManager.default.removeItem(at: tmp)
+                        }
+                        try FileManager.default.copyItem(at: url, to: tmp)
+                        if let p = try? ProfileParser.parse(fileURL: tmp) {
+                            appState.profiles.append(p)
+                        } else {
+                            errorMsg = "解析描述文件失败（格式不支持或文件损坏）"
+                        }
+                    } catch {
+                        errorMsg = "导入描述文件失败：\(error.localizedDescription)"
                     }
-                    try FileManager.default.copyItem(at: url, to: tmp)
-                    if let p = try? ProfileParser.parse(fileURL: tmp) {
-                        appState.profiles.append(p)
-                    }
-                } catch {}
+                }
+            }
+            .alert("提示", isPresented: Binding(
+                get: { errorMsg != nil },
+                set: { if !$0 { errorMsg = nil } }
+            )) {
+                Button("好", role: .cancel) {}
+            } message: {
+                Text(errorMsg ?? "")
             }
         }
     }

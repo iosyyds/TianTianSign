@@ -14,9 +14,9 @@ struct HomeView: View {
     @State private var showingPicker = false
     @State private var newBundleID: String = ""
     @State private var newDisplayName: String = ""
-    @State private var extraOptions: Set<String> = []
     @State private var taskRunner: SigningViewModel?
     @State private var showingSigningSheet = false
+    @State private var importError: String?
 
     var body: some View {
         NavigationStack {
@@ -74,8 +74,6 @@ struct HomeView: View {
                         .autocorrectionDisabled(true)
                         .textInputAutocapitalization(.never)
                     TextField("新显示名（留空不改）", text: $newDisplayName)
-                    Toggle("移除内嵌 Watch App", isOn: .constant(true))
-                    Toggle("注入 / 移除 Dylib（在资料库管理）", isOn: .constant(false))
                 }
 
                 Section {
@@ -105,23 +103,37 @@ struct HomeView: View {
                     SigningProgressView(viewModel: runner)
                 }
             }
+            .alert("导入提示", isPresented: Binding(
+                get: { importError != nil },
+                set: { if !$0 { importError = nil } }
+            )) {
+                Button("好", role: .cancel) {}
+            } message: {
+                Text(importError ?? "")
+            }
         }
     }
 
     private func handleImport(_ result: Result<[URL], Error>) {
-        guard case .success(let urls) = result, let url = urls.first else { return }
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        do {
-            let tmp = FileManager.default.temporaryDirectory
-                .appendingPathComponent(url.lastPathComponent)
-            if FileManager.default.fileExists(atPath: tmp.path) {
-                try FileManager.default.removeItem(at: tmp)
+        switch result {
+        case .failure(let err):
+            importError = "选择文件失败：\(err.localizedDescription)"
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            do {
+                let tmp = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(url.lastPathComponent)
+                if FileManager.default.fileExists(atPath: tmp.path) {
+                    try FileManager.default.removeItem(at: tmp)
+                }
+                try FileManager.default.copyItem(at: url, to: tmp)
+                pickedIPA = try IPAParser.parse(ipazip: tmp)
+            } catch {
+                importError = "导入失败：\(error.localizedDescription)"
+                pickedIPA = nil
             }
-            try FileManager.default.copyItem(at: url, to: tmp)
-            pickedIPA = try IPAParser.parse(ipazip: tmp)
-        } catch {
-            pickedIPA = nil
         }
     }
 
@@ -129,10 +141,7 @@ struct HomeView: View {
         guard let ipa = pickedIPA,
               let cert = appState.selectedCertificate,
               let prof = appState.selectedProfile else { return }
-        var task = SigningTask(id: UUID(),
-                               ipa: ipa,
-                               certificate: cert,
-                               profile: prof)
+        var task = SigningTask(id: UUID(), ipa: ipa, certificate: cert, profile: prof)
         task.newBundleID = newBundleID.isEmpty ? nil : newBundleID
         task.newDisplayName = newDisplayName.isEmpty ? nil : newDisplayName
         taskRunner = SigningViewModel(task: task)

@@ -11,6 +11,7 @@ struct CertificateListView: View {
     @State private var showingImporter = false
     @State private var password = ""
     @State private var pendingURL: URL?
+    @State private var errorMsg: String?
 
     var body: some View {
         NavigationStack {
@@ -47,18 +48,25 @@ struct CertificateListView: View {
             .fileImporter(isPresented: $showingImporter,
                           allowedContentTypes: [.item],
                           allowsMultipleSelection: false) { result in
-                guard case .success(let urls) = result, let url = urls.first else { return }
-                let scoped = url.startAccessingSecurityScopedResource()
-                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-                do {
-                    let tmp = FileManager.default.temporaryDirectory
-                        .appendingPathComponent(url.lastPathComponent)
-                    if FileManager.default.fileExists(atPath: tmp.path) {
-                        try FileManager.default.removeItem(at: tmp)
+                switch result {
+                case .failure(let err):
+                    errorMsg = "选择文件失败：\(err.localizedDescription)"
+                case .success(let urls):
+                    guard let url = urls.first else { return }
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    do {
+                        let tmp = FileManager.default.temporaryDirectory
+                            .appendingPathComponent(url.lastPathComponent)
+                        if FileManager.default.fileExists(atPath: tmp.path) {
+                            try FileManager.default.removeItem(at: tmp)
+                        }
+                        try FileManager.default.copyItem(at: url, to: tmp)
+                        pendingURL = tmp
+                    } catch {
+                        errorMsg = "导入 p12 失败：\(error.localizedDescription)"
                     }
-                    try FileManager.default.copyItem(at: url, to: tmp)
-                    pendingURL = tmp
-                } catch {}
+                }
             }
             .alert("输入 p12 密码", isPresented: Binding(
                 get: { pendingURL != nil },
@@ -71,9 +79,19 @@ struct CertificateListView: View {
                     if let cert = try? CertificateImporter.inspect(p12: url, password: password) {
                         CertificateImporter.storePassword(password, forCertificateID: cert.id)
                         appState.certificates.append(cert)
+                    } else {
+                        errorMsg = "p12 解析失败，请检查密码或文件"
                     }
                     pendingURL = nil; password = ""
                 }
+            }
+            .alert("提示", isPresented: Binding(
+                get: { errorMsg != nil },
+                set: { if !$0 { errorMsg = nil } }
+            )) {
+                Button("好", role: .cancel) {}
+            } message: {
+                Text(errorMsg ?? "")
             }
         }
     }
