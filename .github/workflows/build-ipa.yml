@@ -66,6 +66,7 @@ jobs:
           ln -sf "$PWD/$OSSL_HEADERS" Pods/OpenSSL-Universal/include/openssl
 
       - name: Build .xcarchive (unsigned)
+        id: build
         run: |
           set -o pipefail
           DEVICE_FW="$PWD/Pods/OpenSSL-Universal/OpenSSL.xcframework/ios-arm64"
@@ -81,7 +82,26 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee build.log
 
+      - name: Report error as issue
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let log = '';
+            try { log = fs.readFileSync('build.log', 'utf8'); } catch(e) {}
+            const errLines = log.split('\n').filter(l => /error:|fatal error|Undefined symbol|ld: |linker command failed/i.test(l));
+            const tail = log.split('\n').slice(-50).join('\n');
+            const body = '## Build error\n\n```\n' + (errLines.join('\n') || '(no error lines)') + '\n```\n\n## Tail\n\n```\n' + tail + '\n```';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'CI build error - ' + new Date().toISOString(),
+              body: body.slice(0, 60000)
+            });
+
       - name: Pack unsigned IPA
+        if: success()
         run: |
           set -e
           mkdir -p build/Payload
@@ -91,6 +111,7 @@ jobs:
           ls -la
 
       - name: Publish IPA to Release
+        if: success()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.APP_VERSION }}
