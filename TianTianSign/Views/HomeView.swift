@@ -68,7 +68,7 @@ struct LibraryView: View {
                                 Spacer()
                             }
                         }
-                        .disabled(pickedIPA == nil || appState.selectedCertificate == nil)
+                        .disabled(pickedIPA == nil || appState.selectedCertificate == nil || appState.selectedProfile == nil)
                     }
                 } else {
                     ContentUnavailableView {
@@ -132,8 +132,9 @@ struct LibraryView: View {
 
     private func startSigning() {
         guard let ipa = pickedIPA,
-              let cert = appState.selectedCertificate else { return }
-        var task = SigningTask(id: UUID(), ipa: ipa, certificate: cert, profile: appState.selectedProfile)
+              let cert = appState.selectedCertificate,
+              let prof = appState.selectedProfile else { return }
+        var task = SigningTask(id: UUID(), ipa: ipa, certificate: cert, profile: prof)
         task.newBundleID = newBundleID.isEmpty ? nil : newBundleID
         task.newDisplayName = newDisplayName.isEmpty ? nil : newDisplayName
         taskRunner = SigningViewModel(task: task)
