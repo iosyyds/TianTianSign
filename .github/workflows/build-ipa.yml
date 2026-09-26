@@ -107,6 +107,7 @@ jobs:
           mkdir -p build/Payload
           cp -R build/TianTianSign.xcarchive/Products/Applications/TianTianSign.app build/Payload/
           cd build
+          cp Payload/TianTianSign.app/AppIcon.appiconset/AppIcon-1024.png . 2>/dev/null || true
           zip -r "TianTianSign-${APP_VERSION}.ipa" Payload
           ls -la
 
@@ -116,6 +117,6 @@ jobs:
         with:
           tag_name: v${{ env.APP_VERSION }}
           name: 甜甜签 v${{ env.APP_VERSION }}
-          body: 修复描述文件格式错误 + 修复应用图标。下载 TianTianSign-${APP_VERSION}.ipa 后安装。
-          files: build/TianTianSign-${APP_VERSION}.ipa
+          body: 修复描述文件格式错误 + 修复应用图标。下载安装。
+          files: build/TianTianSign-${{ env.APP_VERSION }}.ipa
           overwrite_files: true
