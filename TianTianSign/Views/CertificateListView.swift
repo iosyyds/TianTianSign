@@ -1,73 +1,102 @@
 //
-//  CertificateListView.swift
+//  CertificatesView.swift
 //  TianTianSign
+//  Feather-style certificate management with p12 + mobileprovision import.
 //
 
 import SwiftUI
 import UniformTypeIdentifiers
 
-struct CertificateListView: View {
+struct CertificatesView: View {
     @EnvironmentObject var appState: AppState
-    @State private var showingImporter = false
+    @State private var showingP12Picker = false
+    @State private var showingProfilePicker = false
+    @State private var pendingP12URL: URL?
+    @State private var pendingProfileURL: URL?
     @State private var password = ""
-    @State private var pendingURL: URL?
     @State private var errorMsg: String?
 
     var body: some View {
         NavigationStack {
             List {
-                if appState.certificates.isEmpty {
-                    ContentUnavailableView("还没有证书",
-                        systemImage: "person.badge.key",
-                        description: Text("点击右上角 + 导入你的 .p12 证书"))
-                }
-                ForEach(appState.certificates) { c in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Circle().fill(c.statusColor).frame(width: 10, height: 10)
-                            Text(c.commonName).font(.headline)
-                            Spacer()
-                            Text(c.certType.rawValue).font(.caption).padding(3)
-                                .background(.quaternary).cornerRadius(4)
+                Section("证书文件 (.p12)") {
+                    if let url = pendingP12URL {
+                        LabeledContent("已选择", value: url.lastPathComponent)
+                    } else {
+                        Button {
+                            showingP12Picker = true
+                        } label: {
+                            Label("导入证书文件", systemImage: "person.badge.key")
                         }
-                        Text("团队：\(c.teamName) (\(c.teamID))").font(.caption)
-                        Text("有效期至：\(c.validUntil.formatted(date: .abbreviated, time: .omitted)) · 剩 \(c.daysRemaining) 天")
-                            .font(.caption).foregroundColor(c.statusColor)
                     }
-                    .padding(.vertical, 4)
                 }
-                .onDelete { offsets in
-                    appState.certificates.remove(atOffsets: offsets)
+
+                Section("描述文件 (.mobileprovision)") {
+                    if let url = pendingProfileURL {
+                        LabeledContent("已选择", value: url.lastPathComponent)
+                    } else {
+                        Button {
+                            showingProfilePicker = true
+                        } label: {
+                            Label("导入描述文件", systemImage: "doc.text")
+                        }
+                    }
+                }
+
+                Section("密码") {
+                    SecureField("p12 密码（无密码留空）", text: $password)
+                }
+
+                Section {
+                    Button {
+                        importCertificate()
+                    } label: {
+                        HStack {
+                            Spacer()
+                            Label("保存证书", systemImage: "checkmark.circle.fill")
+                            Spacer()
+                        }
+                    }
+                    .disabled(pendingP12URL == nil || pendingProfileURL == nil)
+                }
+
+                if !appState.certificates.isEmpty {
+                    Section("已导入的证书") {
+                        ForEach(appState.certificates) { c in
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Circle().fill(c.statusColor).frame(width: 8, height: 8)
+                                    Text(c.commonName).font(.headline)
+                                    Spacer()
+                                }
+                                Text("团队：\(c.teamName) (\(c.teamID))").font(.caption)
+                                Text("有效期至：\(c.validUntil.formatted(date: .abbreviated, time: .omitted)) · 剩 \(c.daysRemaining) 天")
+                                    .font(.caption).foregroundColor(c.statusColor)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                        .onDelete { offsets in
+                            appState.certificates.remove(atOffsets: offsets)
+                        }
+                    }
                 }
             }
             .navigationTitle("证书")
-            .toolbar { EditButton() }
-            .toolbar {
-                Button { showingImporter = true } label: { Image(systemName: "plus") }
-            }
-            .sheet(isPresented: $showingImporter) {
-                FilePicker(allowedContentTypes: [.data], allowsMultiple: false) { urls in
-                    handleURLs(urls)
+            .sheet(isPresented: $showingP12Picker) {
+                FilePicker(allowedContentTypes: [.p12], allowsMultiple: false) { urls in
+                    guard let url = urls.first else { return }
+                    pendingP12URL = url
                 }
+                .ignoresSafeArea()
             }
-            .alert("输入 p12 密码", isPresented: Binding(
-                get: { pendingURL != nil },
-                set: { if !$0 { pendingURL = nil } }
-            )) {
-                SecureField("密码", text: $password)
-                Button("取消", role: .cancel) { pendingURL = nil }
-                Button("导入") {
-                    guard let url = pendingURL else { return }
-                    if let cert = try? CertificateImporter.inspect(p12: url, password: password) {
-                        CertificateImporter.storePassword(password, forCertificateID: cert.id)
-                        appState.certificates.append(cert)
-                    } else {
-                        errorMsg = "p12 解析失败，请检查密码或文件"
-                    }
-                    pendingURL = nil; password = ""
+            .sheet(isPresented: $showingProfilePicker) {
+                FilePicker(allowedContentTypes: [.mobileProvision], allowsMultiple: false) { urls in
+                    guard let url = urls.first else { return }
+                    pendingProfileURL = url
                 }
+                .ignoresSafeArea()
             }
-            .alert("提示", isPresented: Binding(
+            .alert("错误", isPresented: Binding(
                 get: { errorMsg != nil },
                 set: { if !$0 { errorMsg = nil } }
             )) {
@@ -78,17 +107,20 @@ struct CertificateListView: View {
         }
     }
 
-    private func handleURLs(_ urls: [URL]) {
-        guard let url = urls.first else { return }
-        let scoped = url.startAccessingSecurityScopedResource()
-        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+    private func importCertificate() {
+        guard let p12URL = pendingP12URL else { return }
         do {
-            let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(url.lastPathComponent)
-            if FileManager.default.fileExists(atPath: tmp.path) { try FileManager.default.removeItem(at: tmp) }
-            try FileManager.default.copyItem(at: url, to: tmp)
-            pendingURL = tmp
+            if let cert = try? CertificateImporter.inspect(p12: p12URL, password: password) {
+                CertificateImporter.storePassword(password, forCertificateID: cert.id)
+                appState.certificates.append(cert)
+                pendingP12URL = nil
+                pendingProfileURL = nil
+                password = ""
+            } else {
+                errorMsg = "p12 解析失败，请检查密码或文件"
+            }
         } catch {
-            errorMsg = "导入 p12 失败：\(error.localizedDescription)"
+            errorMsg = error.localizedDescription
         }
     }
 }
