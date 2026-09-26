@@ -39,6 +39,7 @@ jobs:
         run: |
           set -e
           git clone --depth 1 https://github.com/zhlynn/zsign.git /tmp/zsign
+          rm -rf SigningCore
           mkdir -p SigningCore
           cp -R /tmp/zsign/src/* SigningCore/
           sed -i '' 's/^int main(int argc, char\* argv\[\])/extern "C" int zsign_main(int argc, char* argv[])/' SigningCore/zsign.cpp
@@ -56,6 +57,7 @@ jobs:
 
       - name: Generate Xcode project & install pods
         run: |
+          set -e
           xcodegen generate
           pod install --repo-update
           OSSL_HEADERS=$(find Pods/OpenSSL-Universal/OpenSSL.xcframework/ios-arm64 -type d -name Headers | head -1)
@@ -65,7 +67,6 @@ jobs:
 
       - name: Build .xcarchive (unsigned)
         id: build
-        continue-on-error: true
         run: |
           set -o pipefail
           DEVICE_FW="$PWD/Pods/OpenSSL-Universal/OpenSSL.xcframework/ios-arm64"
@@ -80,30 +81,6 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" 2>&1 | tee build.log
-
-      - name: Report error as issue
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            let log = '';
-            try { log = fs.readFileSync('build.log', 'utf8'); } catch(e) {}
-            if (steps.build.outcome === 'success') return;
-            const errLines = log.split('\n').filter(l => /error:|fatal error|Undefined symbol|ld: |linker command failed/i.test(l));
-            const tail = log.split('\n').slice(-40).join('\n');
-            const body = '## Build error\n\n```\n' + (errLines.join('\n') || '(no error lines matched)') + '\n```\n\n## Tail\n\n```\n' + tail + '\n```';
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: 'CI build error - ' + new Date().toISOString(),
-              body: body.slice(0, 60000),
-              labels: ['bug']
-            });
-
-      - name: Fail if build failed
-        if: steps.build.outcome == 'failure'
-        run: exit 1
 
       - name: Pack unsigned IPA
         run: |
