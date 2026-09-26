@@ -1,7 +1,7 @@
 //
 //  LibraryView.swift
 //  TianTianSign
-//  Feather-style library with empty state and import button.
+//  Feather-style library.
 //
 
 import SwiftUI
@@ -9,21 +9,21 @@ import UniformTypeIdentifiers
 
 struct LibraryView: View {
     @EnvironmentObject var appState: AppState
-    @State private var showingPicker = false
+    @State private var showingImport = false
     @State private var pickedIPA: IPAFile?
-    @State private var newBundleID: String = ""
-    @State private var newDisplayName: String = ""
+    @State private var newBundleID = ""
+    @State private var newDisplayName = ""
     @State private var taskRunner: SigningViewModel?
-    @State private var showingSigningSheet = false
+    @State private var showingSigning = false
     @State private var importError: String?
 
     var body: some View {
         NavigationStack {
             Form {
                 if let ipa = pickedIPA {
-                    Section("已选 IPA") {
+                    Section("已选应用") {
                         HStack(spacing: 12) {
-                            Image(systemName: "shippingbox.fill")
+                            Image(systemName: "app.fill")
                                 .font(.system(size: 36))
                                 .foregroundColor(.pink)
                             VStack(alignment: .leading, spacing: 2) {
@@ -32,12 +32,10 @@ struct LibraryView: View {
                                     .font(.caption).foregroundColor(.secondary)
                             }
                             Spacer()
-                            Button("更换") { showingPicker = true }
                         }
-                        .padding(.vertical, 4)
                     }
 
-                    Section("签名证书") {
+                    Section("签名") {
                         Picker("证书", selection: $appState.selectedCertificateID) {
                             Text("未选择").tag(UUID?.none)
                             ForEach(appState.certificates) { c in
@@ -45,12 +43,12 @@ struct LibraryView: View {
                             }
                         }
                         if appState.certificates.isEmpty {
-                            Text("先到「证书」页导入 .p12 和描述文件")
+                            Text("请到「证书」标签页导入证书")
                                 .font(.caption).foregroundColor(.secondary)
                         }
                     }
 
-                    Section("可选修改") {
+                    Section("修改") {
                         TextField("新 Bundle ID（留空不改）", text: $newBundleID)
                             .autocorrectionDisabled(true)
                             .textInputAutocapitalization(.never)
@@ -63,8 +61,7 @@ struct LibraryView: View {
                         } label: {
                             HStack {
                                 Spacer()
-                                Label("开始签名", systemImage: "checkmark.seal.fill")
-                                    .font(.headline)
+                                Label("开始签名", systemImage: "signature")
                                 Spacer()
                             }
                         }
@@ -74,10 +71,10 @@ struct LibraryView: View {
                     ContentUnavailableView {
                         Label("没有应用", systemImage: "questionmark.app.dashed")
                     } description: {
-                        Text("点击下方按钮导入你的 IPA 文件开始签名")
+                        Text("导入你的 IPA 文件开始签名")
                     } actions: {
                         Button {
-                            showingPicker = true
+                            showingImport = true
                         } label: {
                             Label("导入 IPA", systemImage: "square.and.arrow.down.on.square")
                         }
@@ -90,19 +87,19 @@ struct LibraryView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
-                        showingPicker = true
+                        showingImport = true
                     } label: {
                         Image(systemName: "plus")
                     }
                 }
             }
-            .sheet(isPresented: $showingPicker) {
-                FilePicker(allowedContentTypes: [.ipa], allowsMultiple: false) { urls in
+            .sheet(isPresented: $showingImport) {
+                FilePicker(allowedContentTypes: [.ipa], allowsMultipleSelection: false) { urls in
                     handleURLs(urls)
                 }
                 .ignoresSafeArea()
             }
-            .sheet(isPresented: $showingSigningSheet) {
+            .sheet(isPresented: $showingSigning) {
                 if let runner = taskRunner { SigningProgressView(viewModel: runner) }
             }
             .alert("导入失败", isPresented: Binding(
@@ -138,7 +135,7 @@ struct LibraryView: View {
         task.newBundleID = newBundleID.isEmpty ? nil : newBundleID
         task.newDisplayName = newDisplayName.isEmpty ? nil : newDisplayName
         taskRunner = SigningViewModel(task: task)
-        showingSigningSheet = true
+        showingSigning = true
         Task { await taskRunner?.start() }
     }
 }
